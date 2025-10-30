@@ -1,3 +1,6 @@
 old/
 __pycache__/
 .DS_Store
+.DS_Store
+.streamlit/
+sodium-hour-378222-99bd330c6df8.json
