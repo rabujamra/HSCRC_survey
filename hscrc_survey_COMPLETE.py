@@ -84,38 +84,38 @@ TIER_DESCRIPTIONS = {
     "BP1": {
         "name": "Interdisciplinary Rounds & Early Discharge Planning",
         1: {"title": "Tier 1: Discharge Planning", "description": "Discharge planning adult general medical and surgical inpatient admissions\n\nAccountable Measure or Outcome:\n- Documentation within 48 hours of admission discharge plan\n- KPI: 70% of inpatient admissions have documented discharge planning OR 10% improvement from baseline"},
-        2: {"title": "Tier 2: HRSN Screening", "description": "Includes Tier 1 PLUS: Adult inpatients offered screening for the 5 HRSN prior to discharge\n\nAccountable Measure or Outcome:\n- Documentation of SDOH for inpatients who are screened\n- KPI: 50% OR 10% improvement from baseline"},
-        3: {"title": "Tier 3: Community Referrals", "description": "Includes Tier 1 & 2 PLUS: Adult inpatients screening positive for HRSN are given referrals\n\nAccountable Measure or Outcome:\n- Documentation of community resources\n- KPI: 75% OR 10% improvement from baseline"}
+        2: {"title": "Tier 2: HRSN Screening", "description": "Includes Tier 1 PLUS: Adult inpatients offered screening for the 5 HRSN prior to discharge\n\nAccountable Measure or Outcome:\n- Documentation of SDOH for inpatients who are screened\n- KPI: 50% OR 10% improvement from baseline of all inpatients identified in their one offered screening for HRSN"},
+        3: {"title": "Tier 3: Community Referrals", "description": "Tier 3: Adult inpatients screening positive for HRSN are given referrals to community resources prior to discharge\n\nAccountable Measure or Outcome:\n- Documentation of community resources access or referral for patients screening positive for one or more of HRSN\n- KPI: 75% OR 10% improvement from baseline of all positive screens for HRSN are given referral prior to discharge identified from tier two"}
     },
     "BP2": {
         "name": "Bed Capacity Alert System",
-        1: {"title": "Tier 1: Establish Capacity Metrics", "description": "Organization establishes one or more capacity metrics\n\nExamples: Total patients, % beds occupied, ED border %, NEDOC score"},
-        2: {"title": "Tier 2: Bed Capacity Alert Process", "description": "Includes Tier 1 PLUS: Bed capacity alert process (surge plan)\n\nDriven by capacity metrics that trigger defined actions"},
-        3: {"title": "Tier 3: Demonstrate Activation", "description": "Includes Tier 1 & 2 PLUS: Quantitatively demonstrates consistent activation of surge plans\n\nInternal metrics to be hospital-defined"}
+        1: {"title": "Tier 1: Establish Capacity Metrics", "description": "Organization establishes one or more capacity metrics\n\nExamples: Total patients in hospital, % beds occupied, ED boarder patients/ total ED beds, NEDOC score"},
+        2: {"title": "Tier 2: Bed Capacity Alert Process", "description": "Includes Tier 1 PLUS: Organization establishes a capacity alert process (surge plan)\n\nDriven by capacity metrics that trigger defined actions that achieve expedited throughput."},
+        3: {"title": "Tier 3: Demonstrate Activation", "description": "Includes Tier 1 & 2 PLUS: Organization quantitatively demonstrates consistent activation of surge plans in response to bed capacity triggers.\n\nInternal metrics to be hospital-defined"}
     },
     "BP3": {
         "name": "Standardized Daily Shift Huddles",
-        1: {"title": "Tier 1: Daily Huddles", "description": "Daily huddles using multidisciplinary team approach\n\nFocus on throughput and discharges"},
-        2: {"title": "Tier 2: Standardized Infrastructure", "description": "Includes Tier 1 PLUS: Standardized infrastructure\n\nStandard scripting, documentation, huddle boards"},
+        1: {"title": "Tier 1: Daily Huddles", "description": "Daily huddles using multidisciplinary team approach\n\nFocus on throughput and discharges\n\n**Accountable Measure or Outcome:**\n- KPI: Multidisciplinary daily huddles are being completed at X frequency as defined by each organization"},
+        2: {"title": "Tier 2: Standardized Infrastructure and an escalation process for addressing clinical and/or non-clinical barriers to discharge or throughput.", "description": "Includes Tier 1 PLUS: Standardized infrastructure\n\nExamples: standard scripting, documentation, huddle boards"},
         3: {"title": "Tier 3: KPI Monitoring", "description": "Includes Tier 1 & 2 PLUS: Monitoring and reporting of KPIs\n\nExample: % discharge orders by noon"}
     },
     "BP4": {
         "name": "Expedited Care Intervention",
-        1: {"title": "Tier 1: One Practice", "description": "Implement ONE expedited care practice\n\nOptions: Nurse Expediter, Discharge Lounge, Observation Unit, Provider Screening, CM/SW Resources"},
+        1: {"title": "Tier 1: One Practice", "description": "Implement ONE expedited care practice\n\nOptions: Nurse Expediter, Discharge Lounge, Observation Unit, Provider Screening, Dedicated CM/SW Resources in ED\n\nReport KPI for chosen practice."},
         2: {"title": "Tier 2: Two Practices", "description": "Implement TWO expedited care practices\n\nReport KPI for each practice"},
         3: {"title": "Tier 3: Three Practices", "description": "Implement THREE expedited care practices\n\nReport KPI for each practice"}
     },
     "BP5": {
         "name": "Patient Flow Throughput Performance Council",
         1: {"title": "Tier 1: Create Structure", "description": "Create multidisciplinary team\n\nExecutive sponsor, committee charter, monthly meetings"},
-        2: {"title": "Tier 2: Establish Accountability", "description": "Includes Tier 1 PLUS: Monthly meetings with stakeholders\n\nRegular report outs, executive participation"},
-        3: {"title": "Tier 3: Change Culture", "description": "Includes Tier 1 & 2 PLUS: Cascade goals to nursing units\n\nFront line engagement, routine huddles"}
+        2: {"title": "Tier 2: Establish Accountability", "description": "Includes Tier 1 PLUS: Monthly meetings with stakeholders\n\n**Accountable Measure:**\n- Committee meetings include regular 'report outs' on relevant KPIs and data\n- The report outs include participation from at least one hospital executive\n- KPIs are evidence-based and shown to improve capacity or throughput or enhance patient care"},
+        3: {"title": "Tier 3: Change Culture", "description": "Includes Tier 1 & 2 PLUS: Cascade goals to nursing units to ensure front line staff awareness & engagement.\n\n**Accountable Measure:**\n- KPIs are reported for key units or service lines as determined by the hospital\n- The committee ensures routine capacity/throughput huddles to drive patient flow and reduce delays\n- The committee ensures that any observation patients have built-in efficiencies & protocols that promote discharge within two midnights. Observation LOS is tracked, data is shared, and OBS PI processes are implemented on units with OBS patients"}
     },
     "BP6": {
         "name": "Clinical Pathways & Observation Management",
-        1: {"title": "Tier 1: Design and Implement", "description": "Clinical pathway tailored to patient population\n\nBased on facility's unique needs"},
-        2: {"title": "Tier 2: Develop Data Infrastructure", "description": "Includes Tier 1 PLUS: Data collection and analysis systems\n\nMonitor and evaluate outcomes"},
-        3: {"title": "Tier 3: Demonstrate Improvement", "description": "Includes Tier 1 & 2 PLUS: Demonstrate measurable results\n\nDecrease variation OR improvement in outcomes"}
+        1: {"title": "Tier 1: Design and Implement", "description": "Organization selects and implements a clinical pathway tailored to patient population\n\nBased on facility's unique needs"},
+        2: {"title": "Tier 2: Develop Data Infrastructure", "description": "Includes Tier 1 PLUS: Data collection and analysis systems\n\nMonitor and evaluate outcomes. These systems should emphasize comparing the effectiveness of inpatient and ambulatory management strategies for the selected patient population, enabling data-driven decision-making and continuous improvement."},
+        3: {"title": "Tier 3: Demonstrate Improvement", "description": "Includes Tier 1 & 2 PLUS: Demonstrate measurable results\n\nThe results will demonstrate a measurable decrease in unwarranted clinical variation and/or measurable improvement in outcomes specific to their chosen intervention."}
     }
 }
 
