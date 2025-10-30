@@ -232,13 +232,29 @@ def generate_hospital_pdf(latest_submission):
     phone = latest_submission.get('phone', 'N/A')
     timestamp = latest_submission.get('timestamp', 'N/A')
     
+    # Approval status
+    is_approved = latest_submission.get('approved', False)
+    if pd.isna(is_approved) or is_approved == '':
+        is_approved = False
+    else:
+        is_approved = bool(is_approved) if isinstance(is_approved, bool) else str(is_approved).lower() == 'true'
+    
+    approved_by = latest_submission.get('approved_by', '')
+    approved_at = latest_submission.get('approved_at', '')
+    approval_status = 'APPROVED' if is_approved else 'DRAFT'
+    
     info_data = [
         ['Hospital:', str(hospital_name)],
         ['Contact:', str(contact_name)],
         ['Email:', str(email)],
         ['Phone:', str(phone)],
-        ['Submitted:', str(timestamp)]
+        ['Submitted:', str(timestamp)],
+        ['Status:', approval_status]
     ]
+    
+    if is_approved and approved_by:
+        info_data.append(['Approved By:', str(approved_by)])
+        info_data.append(['Approved At:', str(approved_at)])
     
     info_table = Table(info_data, colWidths=[2*inch, 4*inch])
     info_table.setStyle(TableStyle([
@@ -811,14 +827,104 @@ if existing_submission is not None and not st.session_state.edit_mode:
     st.markdown('<div class="main-header">🏥 Your Submission</div>', unsafe_allow_html=True)
     st.markdown(f'<div class="sub-header">{selected_hospital}</div>', unsafe_allow_html=True)
     
-    # Edit button at top
-    col1, col2, col3 = st.columns([2, 1, 2])
-    with col2:
-        if st.button("✏️ Edit Submission", use_container_width=True):
-            st.session_state.edit_mode = True
-            st.rerun()
+    # Check approval status
+    is_approved = existing_submission.get('approved', False)
+    if pd.isna(is_approved) or is_approved == '':
+        is_approved = False
+    else:
+        is_approved = bool(is_approved) if isinstance(is_approved, bool) else str(is_approved).lower() == 'true'
+    
+    # Approval Status Banner
+    if is_approved:
+        approved_by = existing_submission.get('approved_by', 'Unknown')
+        approved_at = existing_submission.get('approved_at', 'Unknown')
+        st.success(f"✅ **APPROVED** | Approved by: {approved_by} | Date: {approved_at}")
+    else:
+        st.info("📝 **DRAFT** - This submission is editable and not yet approved")
     
     st.markdown("---")
+    
+    # Action buttons at top
+    col1, col2, col3, col4 = st.columns([2, 1, 1, 2])
+    
+    with col2:
+        # Edit button (only show if not approved)
+        if not is_approved:
+            if st.button("✏️ Edit", use_container_width=True):
+                st.session_state.edit_mode = True
+                st.rerun()
+    
+    with col3:
+        # Approve/Un-approve button
+        if not is_approved:
+            # Show Approve button
+            if st.button("✅ Approve", use_container_width=True):
+                # Mark as approved
+                df = load_data()
+                # Find this hospital's latest submission row
+                hospital_mask = df['hospital_name'] == selected_hospital
+                if hospital_mask.any():
+                    latest_idx = df[hospital_mask].index[-1]
+                    df.at[latest_idx, 'approved'] = True
+                    df.at[latest_idx, 'approved_by'] = existing_submission.get('contact_name', 'Unknown')
+                    df.at[latest_idx, 'approved_at'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    df.to_csv(DATA_FILE, index=False)
+                    st.cache_data.clear()
+                    st.success("✅ Submission approved!")
+                    st.rerun()
+        else:
+            # Show Un-approve button
+            if st.button("🔓 Un-approve", use_container_width=True):
+                st.session_state['show_unapprove_dialog'] = True
+                st.rerun()
+    
+    # Un-approve dialog (using expander as modal)
+    if st.session_state.get('show_unapprove_dialog', False):
+        st.markdown("---")
+        st.markdown("### ⚠️ Un-approve Submission")
+        
+        authorized_email = existing_submission.get('email', '')
+        approved_by = existing_submission.get('approved_by', 'Unknown')
+        approved_at = existing_submission.get('approved_at', 'Unknown')
+        
+        st.warning(f"""
+        **This submission was approved by:** {approved_by}  
+        **Approved on:** {approved_at}
+        
+        To un-approve this submission, enter the authorized email address.
+        """)
+        
+        st.info(f"**Authorized email:** {authorized_email}")
+        
+        entered_email = st.text_input("Enter email to verify:", key="unapprove_email")
+        
+        col_verify1, col_verify2, col_verify3 = st.columns([2, 1, 1])
+        
+        with col_verify2:
+            if st.button("✅ Verify & Un-approve", use_container_width=True):
+                if entered_email.strip().lower() == authorized_email.strip().lower():
+                    # Un-approve!
+                    df = load_data()
+                    hospital_mask = df['hospital_name'] == selected_hospital
+                    if hospital_mask.any():
+                        latest_idx = df[hospital_mask].index[-1]
+                        df.at[latest_idx, 'approved'] = False
+                        df.at[latest_idx, 'approved_by'] = ''
+                        df.at[latest_idx, 'approved_at'] = ''
+                        df.to_csv(DATA_FILE, index=False)
+                        st.cache_data.clear()
+                        st.session_state['show_unapprove_dialog'] = False
+                        st.success("✅ Submission un-approved! You can now edit.")
+                        st.rerun()
+                else:
+                    st.error("❌ Email does not match! Unauthorized.")
+        
+        with col_verify3:
+            if st.button("Cancel", use_container_width=True):
+                st.session_state['show_unapprove_dialog'] = False
+                st.rerun()
+        
+        st.markdown("---")
     
     # Submission Info Card
     st.markdown('<div class="info-card">', unsafe_allow_html=True)
@@ -914,6 +1020,17 @@ else:
     # ==================== SURVEY FORM ====================
     if st.session_state.edit_mode:
         st.markdown('<div class="main-header">✏️ Edit Your Submission</div>', unsafe_allow_html=True)
+        
+        # Check if current submission is approved
+        if existing_submission is not None:
+            is_approved = existing_submission.get('approved', False)
+            if pd.isna(is_approved) or is_approved == '':
+                is_approved = False
+            else:
+                is_approved = bool(is_approved) if isinstance(is_approved, bool) else str(is_approved).lower() == 'true'
+            
+            if is_approved:
+                st.warning("⚠️ **Note:** Making changes will reset the approval status. Your submission will need to be re-approved after updating.")
     else:
         st.markdown('<div class="main-header">🏥 HSCRC Best Practices Survey</div>', unsafe_allow_html=True)
     
@@ -1038,6 +1155,8 @@ else:
     submit_label = "💾 Update Survey" if st.session_state.edit_mode else "✅ Submit Survey"
     
     if st.button(submit_label):
+        # When editing an existing submission, reset approval status
+        # (any edits require re-approval)
         data = {
             'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             'hospital_name': selected_hospital,
@@ -1047,7 +1166,10 @@ else:
             'bp1': bp1,
             'bp1_tier': tier1 if bp1 else None,
             'bp2': bp2,
-            'bp2_tier': tier2 if bp2 else None
+            'bp2_tier': tier2 if bp2 else None,
+            'approved': False,  # Reset approval when editing
+            'approved_by': '',
+            'approved_at': ''
         }
         
         data.update(bp1_data)
