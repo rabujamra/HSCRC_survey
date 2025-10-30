@@ -122,7 +122,7 @@ TIER_DESCRIPTIONS = {
 # ==================== QUESTION RENDERERS ====================
 
 def render_bp1_questions(tier, prefix):
-    """BP1: Interdisciplinary Rounds - CUMULATIVE KPI checkboxes"""
+    """BP1: Interdisciplinary Rounds - CUMULATIVE KPI checkboxes with Tier 3 target/actual for KPIs 5 & 6"""
     st.markdown("### Select the KPIs you plan to achieve: *")
     
     data = {}
@@ -137,7 +137,7 @@ def render_bp1_questions(tier, prefix):
         kpi3 = st.checkbox("50% of adult inpatients were offered screening for the 5 (five) HRSN prior to discharge", key=f"{prefix}_kpi3")
         kpi4 = st.checkbox("10% improvement from baseline of all inpatients identified in tier one offered screening for HRSN", key=f"{prefix}_kpi4")
     
-    # Tier 3 KPIs (shown only for tier 3) - NOTE: These are shown but NO target/actual is collected!
+    # Tier 3 KPIs (shown only for tier 3)
     kpi5 = kpi6 = False
     if tier >= 3:
         kpi5 = st.checkbox("75% of adult inpatients that have screened positive for HRSN are given referrals to community resources prior to discharge", key=f"{prefix}_kpi5")
@@ -145,7 +145,7 @@ def render_bp1_questions(tier, prefix):
     
     st.markdown("---")
     
-    # Collect target/actual ONLY for KPIs 1-4 (not for 5-6 even in Tier 3)
+    # Collect target/actual for KPIs 1-4 (Tiers 1 & 2)
     if kpi1:
         st.markdown(f"**Provide the target KPI if you selected, \"70% of inpatient admissions have documented discharge planning.\" {'*' if tier == 3 else ''}**")
         data[f'{prefix}_kpi1_target'] = st.text_input("Target:", key=f"{prefix}_kpi1_target")
@@ -171,8 +171,18 @@ def render_bp1_questions(tier, prefix):
         st.markdown("**Provide the actual KPI performance results if you selected, \"10% improvement from baseline of all inpatients identified in tier one offered screening for HRSN.\"**")
         data[f'{prefix}_kpi4_actual'] = st.text_input("Actual:", key=f"{prefix}_kpi4_actual")
     
-    # NOTE: KPIs 5 and 6 are shown as checkboxes in Tier 3, but NO target/actual questions are asked for them
-    # This matches the specifications exactly
+    # 🚨 NEW: Collect target/actual for KPIs 5 & 6 in Tier 3
+    if kpi5:
+        st.markdown("**Provide the target KPI if you selected, \"75% of adult inpatients that have screened positive for HRSN are given referrals to community resources prior to discharge.\" *")
+        data[f'{prefix}_kpi5_target'] = st.text_input("Target:", key=f"{prefix}_kpi5_target")
+        st.markdown("**Provide the actual KPI performance results if you selected, \"75% of adult inpatients that have screened positive for HRSN are given referrals to community resources prior to discharge.\" *")
+        data[f'{prefix}_kpi5_actual'] = st.text_input("Actual:", key=f"{prefix}_kpi5_actual")
+    
+    if kpi6:
+        st.markdown("**Provide the target KPI if you selected, \"10% improvement from baseline of all positive screens for HRSN are given a referral prior to discharge identified from tier two.\" *")
+        data[f'{prefix}_kpi6_target'] = st.text_input("Target:", key=f"{prefix}_kpi6_target")
+        st.markdown("**Provide the actual KPI performance results if you selected, \"10% improvement from baseline of all positive screens for HRSN are given a referral prior to discharge identified from tier two.\" *")
+        data[f'{prefix}_kpi6_actual'] = st.text_input("Actual:", key=f"{prefix}_kpi6_actual")
     
     # Rationale and Success Stories (for all tiers)
     st.markdown("---")
@@ -260,7 +270,7 @@ def render_bp3_questions(tier, prefix):
     return data
 
 def render_bp4_questions(tier, prefix):
-    """BP4: Expedited Care Intervention"""
+    """BP4: Expedited Care Intervention - NON-HIERARCHICAL (only shows selected tier)"""
     practices = ["Nurse Expediter", "Discharge Lounge", "Observation Unit (ED or hospital based)", 
                  "Provider Screening in Triage / Early Provider Screening Process", 
                  "Dedicated CM and/or SW resources in the ED"]
@@ -301,79 +311,77 @@ def render_bp4_questions(tier, prefix):
     return data
 
 def render_bp5_questions(tier, prefix):
-    """BP5: Patient Flow Throughput Performance Council - CUMULATIVE with all checkboxes"""
+    """BP5: Patient Flow Throughput Performance Council - NON-HIERARCHICAL (like BP4, only shows selected tier)"""
     data = {}
     
-    st.markdown("### Tier 1: Create Structure")
-    st.markdown("**Select the accountable measure(s) you plan to report: ***")
-    measures = []
-    if st.checkbox("Committee/council scheduled monthly at minimum", key=f"{prefix}_t1_monthly"):
-        measures.append("Monthly committee")
-    if st.checkbox("Team develops and works on capacity and throughput projects", key=f"{prefix}_t1_projects"):
-        measures.append("Throughput projects")
-    if st.checkbox("Other", key=f"{prefix}_t1_other_check"):
-        other = st.text_input("Describe other measure *", key=f"{prefix}_t1_other")
-        measures.append(f"Other: {other}")
+    if tier == 1:
+        st.markdown("### Tier 1: Create Structure")
+        st.markdown("**Select the accountable measure(s) you plan to report: ***")
+        measures = []
+        if st.checkbox("Committee/council scheduled monthly at minimum", key=f"{prefix}_t1_monthly"):
+            measures.append("Monthly committee")
+        if st.checkbox("Team develops and works on capacity and throughput projects", key=f"{prefix}_t1_projects"):
+            measures.append("Throughput projects")
+        if st.checkbox("Other", key=f"{prefix}_t1_other_check"):
+            other = st.text_input("Describe other measure *", key=f"{prefix}_t1_other")
+            measures.append(f"Other: {other}")
+        
+        data[f'{prefix}_t1_measures'] = ", ".join(measures)
+        data[f'{prefix}_t1_formula'] = st.text_area("Provide the target measures' formula to achieve tier 1 *", key=f"{prefix}_t1_formula", height=100)
+        data[f'{prefix}_t1_actual'] = st.text_area("Provide the target measures' actual performance results to achieve tier 1 *", key=f"{prefix}_t1_actual", height=100)
+        data[f'{prefix}_improvements'] = st.text_area("Describe any throughput improvements measured after implementing this best practice *", key=f"{prefix}_improvements", height=100)
     
-    data[f'{prefix}_t1_measures'] = ", ".join(measures)
-    data[f'{prefix}_t1_formula'] = st.text_area("Provide the target measures' formula to achieve tier 1 *", key=f"{prefix}_t1_formula", height=100)
-    data[f'{prefix}_t1_actual'] = st.text_area("Provide the target measures' actual performance results to achieve tier 1 *", key=f"{prefix}_t1_actual", height=100)
-    data[f'{prefix}_improvements'] = st.text_area("Describe any throughput improvements measured after implementing this best practice *", key=f"{prefix}_improvements", height=100)
-    
-    if tier >= 2:
+    elif tier == 2:
         st.markdown("### Tier 2: Establish Accountability")
         st.markdown("**Select the accountable measure(s) you plan to report: ***")
         measures2 = []
-        # Include Tier 1 options
-        if st.checkbox("Committee/council scheduled monthly at minimum (T2)", key=f"{prefix}_t2_monthly"):
+        if st.checkbox("Committee/council scheduled monthly at minimum", key=f"{prefix}_t2_monthly"):
             measures2.append("Monthly committee")
-        # Tier 2 specific options
         if st.checkbox("Committee meetings include regular report outs", key=f"{prefix}_t2_reportouts"):
             measures2.append("Report outs")
         if st.checkbox("Report outs include executive participation", key=f"{prefix}_t2_exec"):
             measures2.append("Executive participation")
-        if st.checkbox("Team develops and works on capacity and throughput projects (T2)", key=f"{prefix}_t2_projects"):
+        if st.checkbox("Team develops and works on capacity and throughput projects", key=f"{prefix}_t2_projects"):
             measures2.append("Throughput projects")
         if st.checkbox("KPIs are evidence-based", key=f"{prefix}_t2_evidence"):
             measures2.append("Evidence-based KPIs")
-        if st.checkbox("Other (Tier 2)", key=f"{prefix}_t2_other_check"):
+        if st.checkbox("Other", key=f"{prefix}_t2_other_check"):
             other = st.text_input("Describe other Tier 2 measure *", key=f"{prefix}_t2_other")
             measures2.append(f"Other: {other}")
         
         data[f'{prefix}_t2_measures'] = ", ".join(measures2)
         data[f'{prefix}_t2_formula'] = st.text_area("Provide the target measures' formula to achieve tier 2 *", key=f"{prefix}_t2_formula", height=100)
         data[f'{prefix}_t2_actual'] = st.text_area("Provide the target measures' actual performance results to achieve tier 2 *", key=f"{prefix}_t2_actual", height=100)
+        data[f'{prefix}_improvements'] = st.text_area("Describe any throughput improvements measured after implementing this best practice *", key=f"{prefix}_improvements", height=100)
     
-    if tier >= 3:
+    elif tier == 3:
         st.markdown("### Tier 3: Change Culture")
         st.markdown("**Select the accountable measure(s) you plan to report: ***")
         measures3 = []
-        # Include Tier 1 options
-        if st.checkbox("Committee/council scheduled monthly at minimum (T3)", key=f"{prefix}_t3_monthly"):
+        if st.checkbox("Committee/council scheduled monthly at minimum", key=f"{prefix}_t3_monthly"):
             measures3.append("Monthly committee")
-        # Include Tier 2 options
-        if st.checkbox("Committee meetings include regular report outs (T3)", key=f"{prefix}_t3_reportouts"):
+        if st.checkbox("Committee meetings include regular report outs", key=f"{prefix}_t3_reportouts"):
             measures3.append("Report outs")
-        if st.checkbox("Report outs include executive participation (T3)", key=f"{prefix}_t3_exec"):
+        if st.checkbox("Report outs include executive participation", key=f"{prefix}_t3_exec"):
             measures3.append("Executive participation")
-        if st.checkbox("Team develops and works on capacity and throughput projects (T3)", key=f"{prefix}_t3_projects"):
+        if st.checkbox("Team develops and works on capacity and throughput projects", key=f"{prefix}_t3_projects"):
             measures3.append("Throughput projects")
-        # Tier 3 specific options
         if st.checkbox("Committee ensures routine capacity/throughput huddles", key=f"{prefix}_t3_huddles"):
             measures3.append("Routine huddles")
         if st.checkbox("Committee ensures observation protocols", key=f"{prefix}_t3_obs"):
             measures3.append("Observation protocols")
-        if st.checkbox("KPIs are evidence-based (T3)", key=f"{prefix}_t3_evidence"):
+        if st.checkbox("KPIs are evidence-based", key=f"{prefix}_t3_evidence"):
             measures3.append("Evidence-based KPIs")
         if st.checkbox("KPIs reported for key units/service lines", key=f"{prefix}_t3_units"):
             measures3.append("KPIs for units")
-        if st.checkbox("Other (Tier 3)", key=f"{prefix}_t3_other_check"):
+        if st.checkbox("Other", key=f"{prefix}_t3_other_check"):
             other = st.text_input("Describe other Tier 3 measure *", key=f"{prefix}_t3_other")
             measures3.append(f"Other: {other}")
         
         data[f'{prefix}_t3_measures'] = ", ".join(measures3)
         data[f'{prefix}_t3_formula'] = st.text_area("Provide the target measures' formula to achieve tier 3 *", key=f"{prefix}_t3_formula", height=100)
         data[f'{prefix}_t3_actual'] = st.text_area("Provide the target measures' actual performance results to achieve tier 3 *", key=f"{prefix}_t3_actual", height=100)
+        data[f'{prefix}_improvements'] = st.text_area("Describe any throughput improvements measured after implementing this best practice *", key=f"{prefix}_improvements", height=100)
     
     # Rationale and Success Stories (for all tiers)
     st.markdown("---")
