@@ -19,7 +19,7 @@ from email_sender import send_submission_email, send_approval_email
 
 # ==================== PAGE CONFIG ====================
 st.set_page_config(
-    page_title="HSCRC Best Practices - Hospital Portal (Google Sheets)",
+    page_title="HSCRC Best Practices - Hospital Portal",
     page_icon="🏥",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -196,7 +196,7 @@ st.markdown("""
 # ==================== DATA FUNCTIONS ====================
 @st.cache_data(ttl=60)
 def load_data():
-    """Load data from Google Sheets"""
+    """Load data"""
     try:
         df = load_data_from_sheets()
         if not df.empty:
@@ -830,7 +830,7 @@ existing_submission = get_hospital_submission(selected_hospital)
 if st.session_state.just_submitted:
     # Show success message, then portal view
     st.success("## ✅ Survey Submitted Successfully!")
-    st.markdown("### Your submission has been recorded in Google Sheets!")
+    st.markdown("### Your submission has been recorded!")
     st.markdown("---")
     st.session_state.just_submitted = False
     st.session_state.edit_mode = False
@@ -1218,7 +1218,7 @@ else:
         data.update(bp2_data)
         
         # Save/Update in Google Sheets (updates existing row if hospital exists)
-        with st.spinner("Saving to Google Sheets..."):
+        with st.spinner("Saving to Data..."):
             success = append_row_to_sheets(data)  # Actually updates the row now
         
         if success:
