@@ -12,7 +12,7 @@ from reportlab.lib.units import inch
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
 
 # Import Google Sheets connector
-from google_sheets_connector import load_data_from_sheets, append_row_to_sheets
+from google_sheets_connector import load_data_from_sheets, save_or_update_submission
 
 # Import email sender
 from email_sender import send_submission_email, send_approval_email
@@ -86,7 +86,7 @@ TIER_DESCRIPTIONS = {
     "BP1": {
         "name": "Interdisciplinary Rounds & Early Discharge Planning",
         1: {"title": "Tier 1: Discharge Planning", "description": "Discharge planning adult general medical and surgical inpatient admissions\n\nAccountable Measure or Outcome:\n- Documentation within 48 hours of admission discharge plan\n- KPI: 70% of inpatient admissions have documented discharge planning OR 10% improvement from baseline"},
-        2: {"title": "Tier 2: HRSN Screening", "description": "Includes Tier 1 PLUS: Adult inpatients offered screening for the 5 HRSN prior to discharge\n\nAccountable Measure or Outcome:\n- Documentation of SDOH for inpatients who are screened\n- KPI: 50% OR 10% improvement from baseline of all inpatients identified in their one offered screening for HRSN"},
+        2: {"title": "Tier 2: HRSN Screening", "description": "Includes Tier 1 PLUS: Adult inpatients offered screening for the 5 HRSN prior to discharge\n\nAccountable Measure or Outcome:\n- Documentation of SDOH for inpatients who are screened\n- KPI: 50% OR 10% improvement from baseline of all inpatients identified in Tier 2 offered screening for HRSN"},
         3: {"title": "Tier 3: Community Referrals", "description": "Tier 3: Adult inpatients screening positive for HRSN are given referrals to community resources prior to discharge\n\nAccountable Measure or Outcome:\n- Documentation of community resources access or referral for patients screening positive for one or more of HRSN\n- KPI: 75% OR 10% improvement from baseline of all positive screens for HRSN are given referral prior to discharge identified from tier two"}
     },
     "BP2": {
@@ -190,8 +190,90 @@ st.markdown("""
         border-radius: 0.5rem;
         margin-bottom: 1rem;
     }
+
+    .tier-badge {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 12px;
+        font-size: 0.85em;
+        font-weight: bold;
+        margin-left: 8px;
+    }
+    .tier-1-badge {
+        background-color: #d4edda;
+        color: #155724;
+        border: 1px solid #c3e6cb;
+    }
+    .tier-2-badge {
+        background-color: #fff3cd;
+        color: #856404;
+        border: 1px solid #ffeeba;
+    }
+    .tier-3-badge {
+        background-color: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c6cb;
+    }
+    .char-counter {
+        font-size: 0.85em;
+        color: #666;
+        text-align: right;
+        margin-top: -10px;
+        margin-bottom: 10px;
+    }
+    .char-counter.warning {
+        color: #ff9800;
+        font-weight: bold;
+    }
+    .char-counter.error {
+        color: #f44336;
+        font-weight: bold;
+    }
 </style>
 """, unsafe_allow_html=True)
+
+# ==================== HELPER FUNCTIONS ====================
+def char_counter_display(current_len, max_len):
+    """Display character counter with color coding"""
+    if current_len > max_len:
+        return f'<div class="char-counter error">⚠️ {current_len}/{max_len} characters (exceeds limit!)</div>'
+    elif current_len > max_len * 0.9:
+        return f'<div class="char-counter warning">{current_len}/{max_len} characters</div>'
+    else:
+        return f'<div class="char-counter">{current_len}/{max_len} characters</div>'
+
+def text_area_with_counter(label, key, height=150, max_chars=1000, value='', tier_label=None):
+    """Text area with character counter and optional tier badge"""
+    if tier_label:
+        tier_class = f"tier-{tier_label}-badge"
+        display_label = f"{label} <span class='tier-badge {tier_class}'>Tier {tier_label}</span>"
+        st.markdown(display_label, unsafe_allow_html=True)
+    else:
+        st.markdown(f"**{label}**")
+    
+    text = st.text_area("", key=key, height=height, value=value, label_visibility="collapsed")
+    st.markdown(char_counter_display(len(text), max_chars), unsafe_allow_html=True)
+    return text
+
+def text_input_with_tier(label, key, value='', tier_label=None):
+    """Text input with optional tier badge"""
+    if tier_label:
+        tier_class = f"tier-{tier_label}-badge"
+        display_label = f"{label} <span class='tier-badge {tier_class}'>Tier {tier_label}</span>"
+        st.markdown(display_label, unsafe_allow_html=True)  # ← FIX: Added =True
+        return st.text_input("", key=key, value=value, label_visibility="collapsed")
+    else:
+        return st.text_input(label, key=key, value=value)
+
+def checkbox_with_tier(label, key, value=False, tier_label=None):
+    """Checkbox with optional tier badge"""
+    if tier_label:
+        tier_class = f"tier-{tier_label}-badge"
+        display_label = f"{label} <span class='tier-badge {tier_class}'>Tier {tier_label}</span>"
+        st.markdown(display_label, unsafe_allow_html=True)  # ← FIX: Added =True
+        return st.checkbox("", key=key, value=value, label_visibility="collapsed")
+    else:
+        return st.checkbox(label, key=key, value=value)
 
 # ==================== DATA FUNCTIONS ====================
 @st.cache_data(ttl=60)
@@ -361,92 +443,175 @@ def render_bp1_questions(tier, prefix, existing_data=None):
     existing_data = existing_data or {}
     
     # Tier 1 KPIs
-    kpi1 = st.checkbox("70% of inpatient admissions have documented discharge planning", 
-                       key=f"{prefix}_kpi1",
-                       value=bool(existing_data.get(f'{prefix}_kpi1_target')))
-    kpi2 = st.checkbox("10% improvement from baseline" if tier == 1 else "10% improvement from baseline of above KPI", 
-                       key=f"{prefix}_kpi2",
-                       value=bool(existing_data.get(f'{prefix}_kpi2_target')))
+    st.markdown("#### 🟢 Tier 1 KPIs:")
+    kpi1 = checkbox_with_tier(  # ← CHANGE FROM st.checkbox
+        "70% of inpatient admissions have documented discharge planning", 
+        f"{prefix}_kpi1",
+        value=bool(existing_data.get(f'{prefix}_kpi1_target')),
+        tier_label=1  # ← ADD THIS!
+    )
+    
+    kpi2 = checkbox_with_tier(  # ← CHANGE THIS
+        "10% improvement from baseline" if tier == 1 else "10% improvement from baseline of above KPI",
+        f"{prefix}_kpi2",
+        value=bool(existing_data.get(f'{prefix}_kpi2_target')),
+        tier_label=1  # ← ADD THIS
+    )
     
     # Tier 2 KPIs
     kpi3 = kpi4 = False
     if tier >= 2:
-        kpi3 = st.checkbox("50% of adult inpatients were offered screening for the 5 (five) HRSN prior to discharge", 
-                          key=f"{prefix}_kpi3",
-                          value=bool(existing_data.get(f'{prefix}_kpi3_target')))
-        kpi4 = st.checkbox("10% improvement from baseline of all inpatients identified in tier one offered screening for HRSN", 
-                          key=f"{prefix}_kpi4",
-                          value=bool(existing_data.get(f'{prefix}_kpi4_target')))
+        st.markdown("#### 🟡 Tier 2 KPIs (in addition to Tier 1):")  # ← ADD THIS
+        kpi3 = checkbox_with_tier(  # ← CHANGE FROM st.checkbox
+            "50% of adult inpatients were offered screening...",
+            f"{prefix}_kpi3",
+            value=bool(existing_data.get(f'{prefix}_kpi3_target')),
+            tier_label=2  # ← ADD THIS!
+        )
     
+        kpi4 = checkbox_with_tier(
+            "10% improvement from baseline of all inpatients identified in tier one offered screening for HRSN",
+            f"{prefix}_kpi4",
+            value=bool(existing_data.get(f'{prefix}_kpi4_target')),
+            tier_label=2
+        )
     # Tier 3 KPIs
     kpi5 = kpi6 = False
     if tier >= 3:
-        kpi5 = st.checkbox("75% of adult inpatients that have screened positive for HRSN are given referrals to community resources prior to discharge", 
-                          key=f"{prefix}_kpi5",
-                          value=bool(existing_data.get(f'{prefix}_kpi5_target')))
-        kpi6 = st.checkbox("10% improvement from baseline of all positive screens for HRSN are given a referral prior to discharge identified from tier two", 
-                          key=f"{prefix}_kpi6",
-                          value=bool(existing_data.get(f'{prefix}_kpi6_target')))
+        st.markdown("#### 🔴 Tier 3 KPIs (in addition to Tiers 1 & 2):")  # ← ADD THIS
+        kpi5 = checkbox_with_tier(  # ← CHANGE FROM st.checkbox
+            "75% of adult inpatients that have screened positive...",
+            f"{prefix}_kpi5",
+            value=bool(existing_data.get(f'{prefix}_kpi5_target')),
+            tier_label=3  # ← ADD THIS!
+        )
+
+        kpi6 = checkbox_with_tier(
+            "10% improvement from baseline of all positive screens for HRSN are given a referral prior to discharge identified from tier two",
+            f"{prefix}_kpi6",
+            value=bool(existing_data.get(f'{prefix}_kpi6_target')),
+            tier_label=3
+        )
     
     st.markdown("---")
     
-    # Target/Actual for KPI 1-4
+    # KPI 1 inputs
     if kpi1:
-        st.markdown(f"**Provide the target KPI if you selected, \"70% of inpatient admissions have documented discharge planning.\" {'*' if tier == 3 else ''}**")
-        data[f'{prefix}_kpi1_target'] = st.text_input("Target:", key=f"{prefix}_kpi1_target", value=existing_data.get(f'{prefix}_kpi1_target', ''))
-        st.markdown("**Provide the actual KPI performance results if you selected, \"70% of inpatient admissions have documented discharge planning.\"**")
-        data[f'{prefix}_kpi1_actual'] = st.text_input("Actual:", key=f"{prefix}_kpi1_actual", value=existing_data.get(f'{prefix}_kpi1_actual', ''))
+        data[f'{prefix}_kpi1_target'] = text_input_with_tier(
+            "Provide the target KPI if you selected, \"70% of inpatient admissions have documented discharge planning.\"",
+            f"{prefix}_kpi1_target",
+            value=existing_data.get(f'{prefix}_kpi1_target', ''),
+            tier_label=1
+        )
+        data[f'{prefix}_kpi1_actual'] = text_input_with_tier(  # ← CHANGE THIS
+            "Provide the actual KPI performance results if you selected, \"70% of inpatient admissions have documented discharge planning.\"",
+            f"{prefix}_kpi1_actual",
+            value=existing_data.get(f'{prefix}_kpi1_actual', ''),
+            tier_label=1  # ← ADD THIS
+        )
     
+    # KPI 2 inputs
     if kpi2:
         kpi2_text = "10% improvement from baseline" if tier == 1 else "10% improvement from baseline of above KPI"
-        st.markdown(f"**Provide the target KPI if you selected, \"{kpi2_text}.\"**")
-        data[f'{prefix}_kpi2_target'] = st.text_input("Target:", key=f"{prefix}_kpi2_target", value=existing_data.get(f'{prefix}_kpi2_target', ''))
-        st.markdown(f"**Provide the actual KPI performance results if you selected, \"{kpi2_text}.\"**")
-        data[f'{prefix}_kpi2_actual'] = st.text_input("Actual:", key=f"{prefix}_kpi2_actual", value=existing_data.get(f'{prefix}_kpi2_actual', ''))
+        data[f'{prefix}_kpi2_target'] = text_input_with_tier(
+            f"Provide the target KPI if you selected, \"{kpi2_text}.\"",
+            f"{prefix}_kpi2_target",
+            value=existing_data.get(f'{prefix}_kpi2_target', ''),
+            tier_label=1
+        )
+        data[f'{prefix}_kpi2_actual'] = text_input_with_tier(
+            f"Provide the actual KPI performance results if you selected, \"{kpi2_text}.\"",
+            f"{prefix}_kpi2_actual",
+            value=existing_data.get(f'{prefix}_kpi2_actual', ''),
+            tier_label=1
+        )
     
+    # KPI 3 inputs 
     if kpi3:
-        st.markdown("**Provide the target KPI if you selected, \"50% of adult inpatients were offered screening for the 5 (five) HRSN prior to discharge.\"**")
-        data[f'{prefix}_kpi3_target'] = st.text_input("Target:", key=f"{prefix}_kpi3_target", value=existing_data.get(f'{prefix}_kpi3_target', ''))
-        st.markdown("**Provide the actual KPI performance results if you selected, \"50% of adult inpatients were offered screening for the 5 (five) HRSN prior to discharge.\"**")
-        data[f'{prefix}_kpi3_actual'] = st.text_input("Actual:", key=f"{prefix}_kpi3_actual", value=existing_data.get(f'{prefix}_kpi3_actual', ''))
+        data[f'{prefix}_kpi3_target'] = text_input_with_tier(
+            "Provide the target KPI if you selected, \"50% of adult inpatients were offered screening for the 5 (five) HRSN prior to discharge.\"",
+            f"{prefix}_kpi3_target",
+            value=existing_data.get(f'{prefix}_kpi3_target', ''),
+            tier_label=2
+        )
+        data[f'{prefix}_kpi3_actual'] = text_input_with_tier(
+            "Provide the actual KPI performance results if you selected, \"50% of adult inpatients were offered screening for the 5 (five) HRSN prior to discharge.\"",
+            f"{prefix}_kpi3_actual",
+            value=existing_data.get(f'{prefix}_kpi3_actual', ''),
+            tier_label=2
+        )
     
+    # KPI 4 inputs 
     if kpi4:
-        st.markdown("**Provide the target KPI if you selected, \"10% improvement from baseline of all inpatients identified in tier one offered screening for HRSN.\"**")
-        data[f'{prefix}_kpi4_target'] = st.text_input("Target:", key=f"{prefix}_kpi4_target", value=existing_data.get(f'{prefix}_kpi4_target', ''))
-        st.markdown("**Provide the actual KPI performance results if you selected, \"10% improvement from baseline of all inpatients identified in tier one offered screening for HRSN.\"**")
-        data[f'{prefix}_kpi4_actual'] = st.text_input("Actual:", key=f"{prefix}_kpi4_actual", value=existing_data.get(f'{prefix}_kpi4_actual', ''))
+        data[f'{prefix}_kpi4_target'] = text_input_with_tier(
+            "Provide the target KPI if you selected, \"10% improvement from baseline of all inpatients identified in tier one offered screening for HRSN.\"",
+            f"{prefix}_kpi4_target",
+            value=existing_data.get(f'{prefix}_kpi4_target', ''),
+            tier_label=2
+        )
+        data[f'{prefix}_kpi4_actual'] = text_input_with_tier(
+            "Provide the actual KPI performance results if you selected, \"10% improvement from baseline of all inpatients identified in tier one offered screening for HRSN.\"",
+            f"{prefix}_kpi4_actual",
+            value=existing_data.get(f'{prefix}_kpi4_actual', ''),
+            tier_label=2
+        )
     
-    # Target/Actual for KPI 5 & 6 in Tier 3
+    # KPI 5 inputs 
     if kpi5:
-        st.markdown("**Provide the target KPI if you selected, \"75% of adult inpatients that have screened positive for HRSN are given referrals to community resources prior to discharge.\" *")
-        data[f'{prefix}_kpi5_target'] = st.text_input("Target:", key=f"{prefix}_kpi5_target", value=existing_data.get(f'{prefix}_kpi5_target', ''))
-        st.markdown("**Provide the actual KPI performance results if you selected, \"75% of adult inpatients that have screened positive for HRSN are given referrals to community resources prior to discharge.\" *")
-        data[f'{prefix}_kpi5_actual'] = st.text_input("Actual:", key=f"{prefix}_kpi5_actual", value=existing_data.get(f'{prefix}_kpi5_actual', ''))
+        data[f'{prefix}_kpi5_target'] = text_input_with_tier(
+            "Provide the target KPI if you selected, \"75% of adult inpatients that have screened positive for HRSN are given referrals to community resources prior to discharge.\" *",
+            f"{prefix}_kpi5_target",
+            value=existing_data.get(f'{prefix}_kpi5_target', ''),
+            tier_label=3
+        )
+        data[f'{prefix}_kpi5_actual'] = text_input_with_tier(
+            "Provide the actual KPI performance results if you selected, \"75% of adult inpatients that have screened positive for HRSN are given referrals to community resources prior to discharge.\" *",
+            f"{prefix}_kpi5_actual",
+            value=existing_data.get(f'{prefix}_kpi5_actual', ''),
+            tier_label=3
+        )
     
+    # KPI 6 inputs 
     if kpi6:
-        st.markdown("**Provide the target KPI if you selected, \"10% improvement from baseline of all positive screens for HRSN are given a referral prior to discharge identified from tier two.\" *")
-        data[f'{prefix}_kpi6_target'] = st.text_input("Target:", key=f"{prefix}_kpi6_target", value=existing_data.get(f'{prefix}_kpi6_target', ''))
-        st.markdown("**Provide the actual KPI performance results if you selected, \"10% improvement from baseline of all positive screens for HRSN are given a referral prior to discharge identified from tier two.\" *")
-        data[f'{prefix}_kpi6_actual'] = st.text_input("Actual:", key=f"{prefix}_kpi6_actual", value=existing_data.get(f'{prefix}_kpi6_actual', ''))
+        data[f'{prefix}_kpi6_target'] = text_input_with_tier(
+            "Provide the target KPI if you selected, \"10% improvement from baseline of all positive screens for HRSN are given a referral prior to discharge identified from tier two.\" *",
+            f"{prefix}_kpi6_target",
+            value=existing_data.get(f'{prefix}_kpi6_target', ''),
+            tier_label=3
+        )
+        data[f'{prefix}_kpi6_actual'] = text_input_with_tier(
+            "Provide the actual KPI performance results if you selected, \"10% improvement from baseline of all positive screens for HRSN are given a referral prior to discharge identified from tier two.\" *",
+            f"{prefix}_kpi6_actual",
+            value=existing_data.get(f'{prefix}_kpi6_actual', ''),
+            tier_label=3
+        )
     
-    # Rationale and Success Stories
+    # ============== RATIONALE & SUCCESS ==============
     st.markdown("---")
-    data[f'{prefix}_rationale'] = st.text_area("Provide the rationale to why you selected this best practice & tier *", 
-                                                key=f"{prefix}_rationale", height=150,
-                                                value=existing_data.get(f'{prefix}_rationale', ''))
-    data[f'{prefix}_success'] = st.text_area("Are there any success stories and/or barriers to implementing this best practice? *", 
-                                              key=f"{prefix}_success", height=150,
-                                              value=existing_data.get(f'{prefix}_success', ''))
+    data[f'{prefix}_rationale'] = text_area_with_counter(  # ← CHANGE THIS
+        "Provide the rationale to why you selected this best practice & tier *",
+        f"{prefix}_rationale",
+        height=150,
+        max_chars=2000,  # ← ADD THIS
+        value=existing_data.get(f'{prefix}_rationale', '')
+    )
+    data[f'{prefix}_success'] = text_area_with_counter(  # ← CHANGE THIS
+        "Are there any success stories and/or barriers to implementing this best practice? *",
+        f"{prefix}_success",
+        height=150,
+        max_chars=2000,  # ← ADD THIS
+        value=existing_data.get(f'{prefix}_success', '')
+    )
     
     return data
 
 def render_bp2_questions(tier, prefix, existing_data=None):
-    """BP2: Bed Capacity Alert System - CUMULATIVE"""
-    st.markdown("### Tier 1: Capacity Metrics")
-    st.markdown("**Describe the one or more capacity metrics your organization selected to achieve tier 1: ***")
-    
+    """BP2: Bed Capacity Alert System - CUMULATIVE with tier labels"""
     data = {}
     existing_data = existing_data or {}
+    
+    st.markdown("### 🟢 Tier 1: Capacity Metrics")
+    st.markdown("**Describe the one or more capacity metrics your organization selected to achieve tier 1: ***")
     
     metrics = []
     if st.checkbox("Total number of patients in hospital", key=f"{prefix}_metric_total"):
@@ -462,71 +627,127 @@ def render_bp2_questions(tier, prefix, existing_data=None):
         metrics.append(f"Other: {other}")
     
     data[f'{prefix}_capacity_metrics'] = ", ".join(metrics)
-    data[f'{prefix}_t1_target'] = st.text_input("Provide the target metric for your chosen capacity metric to achieve tier 1 *", 
-                                                  key=f"{prefix}_t1_target",
-                                                  value=existing_data.get(f'{prefix}_t1_target', ''))
-    data[f'{prefix}_t1_actual'] = st.text_input("Provide the actual target metric performance results to achieve tier 1 *", 
-                                                  key=f"{prefix}_t1_actual",
-                                                  value=existing_data.get(f'{prefix}_t1_actual', ''))
+    data[f'{prefix}_t1_target'] = text_input_with_tier(
+        "Provide the target metric for your chosen capacity metric to achieve tier 1 *",
+        f"{prefix}_t1_target",
+        value=existing_data.get(f'{prefix}_t1_target', ''),
+        tier_label=1
+    )
+    data[f'{prefix}_t1_actual'] = text_input_with_tier(
+        "Provide the actual target metric performance results to achieve tier 1 *",
+        f"{prefix}_t1_actual",
+        value=existing_data.get(f'{prefix}_t1_actual', ''),
+        tier_label=1
+    )
     
     if tier >= 2:
-        st.markdown("### Tier 2: Bed Capacity Alert Process")
-        data[f'{prefix}_t2_surge'] = st.text_area("Describe the established bed capacity alert process (aka surge plan) driven by capacity metrics *", 
-                                                    key=f"{prefix}_t2_surge", height=150,
-                                                    value=existing_data.get(f'{prefix}_t2_surge', ''))
-        data[f'{prefix}_t2_target'] = st.text_input("Provide the target metric for your chosen capacity metric to achieve tier 2 *", 
-                                                      key=f"{prefix}_t2_target",
-                                                      value=existing_data.get(f'{prefix}_t2_target', ''))
-        data[f'{prefix}_t2_actual'] = st.text_input("Provide the actual target metric performance results to achieve tier 2 *", 
-                                                      key=f"{prefix}_t2_actual",
-                                                      value=existing_data.get(f'{prefix}_t2_actual', ''))
+        st.markdown("### 🟡 Tier 2: Bed Capacity Alert Process (in addition to Tier 1)")
+        data[f'{prefix}_t2_surge'] = text_area_with_counter(
+            "Describe the established bed capacity alert process (aka surge plan) driven by capacity metrics *",
+            f"{prefix}_t2_surge",
+            height=150,
+            max_chars=2000,
+            value=existing_data.get(f'{prefix}_t2_surge', ''),
+            tier_label=2
+        )
+        data[f'{prefix}_t2_target'] = text_input_with_tier(
+            "Provide the target metric for your chosen capacity metric to achieve tier 2 *",
+            f"{prefix}_t2_target",
+            value=existing_data.get(f'{prefix}_t2_target', ''),
+            tier_label=2
+        )
+        data[f'{prefix}_t2_actual'] = text_input_with_tier(
+            "Provide the actual target metric performance results to achieve tier 2 *",
+            f"{prefix}_t2_actual",
+            value=existing_data.get(f'{prefix}_t2_actual', ''),
+            tier_label=2
+        )
     
     if tier >= 3:
-        st.markdown("### Tier 3: Demonstrate Activation")
-        data[f'{prefix}_t3_quant'] = st.text_area("Describe the process to achieve tier 3, when an organization quantitatively demonstrates consistent activation of surge plans *", 
-                                                    key=f"{prefix}_t3_quant", height=150,
-                                                    value=existing_data.get(f'{prefix}_t3_quant', ''))
-        data[f'{prefix}_t3_target'] = st.text_input("Provide the target metric for your chosen capacity metric to achieve tier 3 *", 
-                                                      key=f"{prefix}_t3_target",
-                                                      value=existing_data.get(f'{prefix}_t3_target', ''))
-        data[f'{prefix}_t3_actual'] = st.text_input("Provide the actual target metric performance results to achieve tier 3 *", 
-                                                      key=f"{prefix}_t3_actual",
-                                                      value=existing_data.get(f'{prefix}_t3_actual', ''))
+        st.markdown("### 🔴 Tier 3: Demonstrate Activation (in addition to Tiers 1 & 2)")
+        data[f'{prefix}_t3_quant'] = text_area_with_counter(
+            "Describe the process to achieve tier 3, when an organization quantitatively demonstrates consistent activation of surge plans *",
+            f"{prefix}_t3_quant",
+            height=150,
+            max_chars=2000,
+            value=existing_data.get(f'{prefix}_t3_quant', ''),
+            tier_label=3
+        )
+        data[f'{prefix}_t3_target'] = text_input_with_tier(
+            "Provide the target metric for your chosen capacity metric to achieve tier 3 *",
+            f"{prefix}_t3_target",
+            value=existing_data.get(f'{prefix}_t3_target', ''),
+            tier_label=3
+        )
+        data[f'{prefix}_t3_actual'] = text_input_with_tier(
+            "Provide the actual target metric performance results to achieve tier 3 *",
+            f"{prefix}_t3_actual",
+            value=existing_data.get(f'{prefix}_t3_actual', ''),
+            tier_label=3
+        )
     
     st.markdown("---")
-    data[f'{prefix}_rationale'] = st.text_area("Provide the rationale to why you selected this best practice & tier *", 
-                                                key=f"{prefix}_rationale", height=150,
-                                                value=existing_data.get(f'{prefix}_rationale', ''))
-    data[f'{prefix}_success'] = st.text_area("Are there any success stories and/or barriers to implementing this best practice? *", 
-                                              key=f"{prefix}_success", height=150,
-                                              value=existing_data.get(f'{prefix}_success', ''))
+    data[f'{prefix}_rationale'] = text_area_with_counter(
+        "Provide the rationale to why you selected this best practice & tier *",
+        f"{prefix}_rationale",
+        height=150,
+        max_chars=2000,
+        value=existing_data.get(f'{prefix}_rationale', '')
+    )
+    data[f'{prefix}_success'] = text_area_with_counter(
+        "Are there any success stories and/or barriers to implementing this best practice? *",
+        f"{prefix}_success",
+        height=150,
+        max_chars=2000,
+        value=existing_data.get(f'{prefix}_success', '')
+    )
     
     return data
 
 def render_bp3_questions(tier, prefix, existing_data=None):
-    """BP3: Standardized Daily Shift Huddles - CUMULATIVE"""
+    """BP3: Standardized Daily Shift Huddles - CUMULATIVE with tier labels"""
     data = {}
     existing_data = existing_data or {}
     
-    st.markdown("### Tier 1: Daily Huddles")
-    data[f'{prefix}_t1_kpi'] = st.text_area("Provide the KPI chosen to achieve tier 1 *", 
-                                             key=f"{prefix}_t1_kpi", height=100,
-                                             value=existing_data.get(f'{prefix}_t1_kpi', ''))
-    data[f'{prefix}_t1_actual'] = st.text_area("Provide the actual KPI performance results to achieve tier 1 *", 
-                                                 key=f"{prefix}_t1_actual", height=100,
-                                                 value=existing_data.get(f'{prefix}_t1_actual', ''))
+    st.markdown("### 🟢 Tier 1: Daily Huddles")
+    data[f'{prefix}_t1_kpi'] = text_area_with_counter(
+        "Provide the KPI chosen to achieve tier 1 *",
+        f"{prefix}_t1_kpi",
+        height=100,
+        max_chars=1000,
+        value=existing_data.get(f'{prefix}_t1_kpi', ''),
+        tier_label=1
+    )
+    data[f'{prefix}_t1_actual'] = text_area_with_counter(
+        "Provide the actual KPI performance results to achieve tier 1 *",
+        f"{prefix}_t1_actual",
+        height=100,
+        max_chars=1000,
+        value=existing_data.get(f'{prefix}_t1_actual', ''),
+        tier_label=1
+    )
     
     if tier >= 2:
-        st.markdown("### Tier 2: Standardized Infrastructure")
-        data[f'{prefix}_t2_kpi'] = st.text_area("Provide the KPI chosen to achieve tier 2 *", 
-                                                 key=f"{prefix}_t2_kpi", height=100,
-                                                 value=existing_data.get(f'{prefix}_t2_kpi', ''))
-        data[f'{prefix}_t2_actual'] = st.text_area("Provide the actual KPI performance results to achieve tier 2 *", 
-                                                     key=f"{prefix}_t2_actual", height=100,
-                                                     value=existing_data.get(f'{prefix}_t2_actual', ''))
+        st.markdown("### 🟡 Tier 2: Standardized Infrastructure (in addition to Tier 1)")
+        data[f'{prefix}_t2_kpi'] = text_area_with_counter(
+            "Provide the KPI chosen to achieve tier 2 *",
+            f"{prefix}_t2_kpi",
+            height=100,
+            max_chars=1000,
+            value=existing_data.get(f'{prefix}_t2_kpi', ''),
+            tier_label=2
+        )
+        data[f'{prefix}_t2_actual'] = text_area_with_counter(
+            "Provide the actual KPI performance results to achieve tier 2 *",
+            f"{prefix}_t2_actual",
+            height=100,
+            max_chars=1000,
+            value=existing_data.get(f'{prefix}_t2_actual', ''),
+            tier_label=2
+        )
     
     if tier >= 3:
-        st.markdown("### Tier 3: KPI Monitoring")
+        st.markdown("### 🔴 Tier 3: KPI Monitoring (in addition to Tiers 1 & 2)")
         st.markdown("**Describe the KPI your organization implemented to achieve tier 3: ***")
         kpi_types = []
         if st.checkbox("Percent of discharge orders written by noon", key=f"{prefix}_t3_noon"):
@@ -538,25 +759,43 @@ def render_bp3_questions(tier, prefix, existing_data=None):
             kpi_types.append(f"Other: {other}")
         
         data[f'{prefix}_t3_kpi_type'] = ", ".join(kpi_types)
-        data[f'{prefix}_t3_formula'] = st.text_area("Provide the KPI formula chosen to achieve tier 3 *", 
-                                                      key=f"{prefix}_t3_formula", height=100,
-                                                      value=existing_data.get(f'{prefix}_t3_formula', ''))
-        data[f'{prefix}_t3_actual'] = st.text_area("Provide the actual KPI performance results to achieve tier 3 *", 
-                                                     key=f"{prefix}_t3_actual", height=100,
-                                                     value=existing_data.get(f'{prefix}_t3_actual', ''))
+        data[f'{prefix}_t3_formula'] = text_area_with_counter(
+            "Provide the KPI formula chosen to achieve tier 3 *",
+            f"{prefix}_t3_formula",
+            height=100,
+            max_chars=1000,
+            value=existing_data.get(f'{prefix}_t3_formula', ''),
+            tier_label=3
+        )
+        data[f'{prefix}_t3_actual'] = text_area_with_counter(
+            "Provide the actual KPI performance results to achieve tier 3 *",
+            f"{prefix}_t3_actual",
+            height=100,
+            max_chars=1000,
+            value=existing_data.get(f'{prefix}_t3_actual', ''),
+            tier_label=3
+        )
     
     st.markdown("---")
-    data[f'{prefix}_rationale'] = st.text_area("Provide the rationale to why you selected this best practice & tier *", 
-                                                key=f"{prefix}_rationale", height=150,
-                                                value=existing_data.get(f'{prefix}_rationale', ''))
-    data[f'{prefix}_success'] = st.text_area("Are there any success stories and/or barriers to implementing this best practice? *", 
-                                              key=f"{prefix}_success", height=150,
-                                              value=existing_data.get(f'{prefix}_success', ''))
+    data[f'{prefix}_rationale'] = text_area_with_counter(
+        "Provide the rationale to why you selected this best practice & tier *",
+        f"{prefix}_rationale",
+        height=150,
+        max_chars=2000,
+        value=existing_data.get(f'{prefix}_rationale', '')
+    )
+    data[f'{prefix}_success'] = text_area_with_counter(
+        "Are there any success stories and/or barriers to implementing this best practice? *",
+        f"{prefix}_success",
+        height=150,
+        max_chars=2000,
+        value=existing_data.get(f'{prefix}_success', '')
+    )
     
     return data
 
 def render_bp4_questions(tier, prefix, existing_data=None):
-    """BP4: Expedited Care Intervention - NON-HIERARCHICAL"""
+    """BP4: Expedited Care Intervention - NON-HIERARCHICAL (no tier labels needed)"""
     practices = ["Nurse Expediter", "Discharge Lounge", "Observation Unit (ED or hospital based)", 
                  "Provider Screening in Triage / Early Provider Screening Process", 
                  "Dedicated CM and/or SW resources in the ED"]
@@ -567,65 +806,121 @@ def render_bp4_questions(tier, prefix, existing_data=None):
     if tier == 1:
         st.markdown("### Tier 1: Select ONE Expedited Care Practice")
         data[f'{prefix}_practice'] = st.radio("Select the expedited care practice you plan to report *", practices, key=f"{prefix}_practice")
-        data[f'{prefix}_t1_formula'] = st.text_area("Provide the KPI formula for this practice *", 
-                                                      key=f"{prefix}_t1_formula", height=100,
-                                                      value=existing_data.get(f'{prefix}_t1_formula', ''))
-        data[f'{prefix}_t1_actual'] = st.text_area("Provide the actual KPI performance results *", 
-                                                     key=f"{prefix}_t1_actual", height=100,
-                                                     value=existing_data.get(f'{prefix}_t1_actual', ''))
+        data[f'{prefix}_t1_formula'] = text_area_with_counter(
+            "Provide the KPI formula for this practice *",
+            f"{prefix}_t1_formula",
+            height=100,
+            max_chars=1000,
+            value=existing_data.get(f'{prefix}_t1_formula', '')
+        )
+        data[f'{prefix}_t1_actual'] = text_area_with_counter(
+            "Provide the actual KPI performance results *",
+            f"{prefix}_t1_actual",
+            height=100,
+            max_chars=1000,
+            value=existing_data.get(f'{prefix}_t1_actual', '')
+        )
     
     elif tier == 2:
         st.markdown("### Tier 2: Select TWO Expedited Care Practices")
         selected = st.multiselect("Select two expedited care practices *", practices, key=f"{prefix}_practices")
         data[f'{prefix}_practices'] = ", ".join(selected)
-        data[f'{prefix}_t1_formula'] = st.text_area("Provide the KPI formula for first practice *", 
-                                                      key=f"{prefix}_t1_formula", height=100,
-                                                      value=existing_data.get(f'{prefix}_t1_formula', ''))
-        data[f'{prefix}_t1_actual'] = st.text_area("Provide the actual KPI performance for first practice *", 
-                                                     key=f"{prefix}_t1_actual", height=100,
-                                                     value=existing_data.get(f'{prefix}_t1_actual', ''))
-        data[f'{prefix}_t2_formula'] = st.text_area("Provide the KPI formula for second practice *", 
-                                                      key=f"{prefix}_t2_formula", height=100,
-                                                      value=existing_data.get(f'{prefix}_t2_formula', ''))
-        data[f'{prefix}_t2_actual'] = st.text_area("Provide the actual KPI performance for second practice *", 
-                                                     key=f"{prefix}_t2_actual", height=100,
-                                                     value=existing_data.get(f'{prefix}_t2_actual', ''))
+        data[f'{prefix}_t1_formula'] = text_area_with_counter(
+            "Provide the KPI formula for first practice *",
+            f"{prefix}_t1_formula",
+            height=100,
+            max_chars=1000,
+            value=existing_data.get(f'{prefix}_t1_formula', '')
+        )
+        data[f'{prefix}_t1_actual'] = text_area_with_counter(
+            "Provide the actual KPI performance for first practice *",
+            f"{prefix}_t1_actual",
+            height=100,
+            max_chars=1000,
+            value=existing_data.get(f'{prefix}_t1_actual', '')
+        )
+        data[f'{prefix}_t2_formula'] = text_area_with_counter(
+            "Provide the KPI formula for second practice *",
+            f"{prefix}_t2_formula",
+            height=100,
+            max_chars=1000,
+            value=existing_data.get(f'{prefix}_t2_formula', '')
+        )
+        data[f'{prefix}_t2_actual'] = text_area_with_counter(
+            "Provide the actual KPI performance for second practice *",
+            f"{prefix}_t2_actual",
+            height=100,
+            max_chars=1000,
+            value=existing_data.get(f'{prefix}_t2_actual', '')
+        )
     
     elif tier == 3:
         st.markdown("### Tier 3: Select THREE Expedited Care Practices")
         selected = st.multiselect("Select three expedited care practices *", practices, key=f"{prefix}_practices")
         data[f'{prefix}_practices'] = ", ".join(selected)
-        data[f'{prefix}_t1_formula'] = st.text_area("Provide the KPI formula for first practice *", 
-                                                      key=f"{prefix}_t1_formula", height=100,
-                                                      value=existing_data.get(f'{prefix}_t1_formula', ''))
-        data[f'{prefix}_t1_actual'] = st.text_area("Provide the actual KPI performance for first practice *", 
-                                                     key=f"{prefix}_t1_actual", height=100,
-                                                     value=existing_data.get(f'{prefix}_t1_actual', ''))
-        data[f'{prefix}_t2_formula'] = st.text_area("Provide the KPI formula for second practice *", 
-                                                      key=f"{prefix}_t2_formula", height=100,
-                                                      value=existing_data.get(f'{prefix}_t2_formula', ''))
-        data[f'{prefix}_t2_actual'] = st.text_area("Provide the actual KPI performance for second practice *", 
-                                                     key=f"{prefix}_t2_actual", height=100,
-                                                     value=existing_data.get(f'{prefix}_t2_actual', ''))
-        data[f'{prefix}_t3_formula'] = st.text_area("Provide the KPI formula for third practice *", 
-                                                      key=f"{prefix}_t3_formula", height=100,
-                                                      value=existing_data.get(f'{prefix}_t3_formula', ''))
-        data[f'{prefix}_t3_actual'] = st.text_area("Provide the actual KPI performance for third practice *", 
-                                                     key=f"{prefix}_t3_actual", height=100,
-                                                     value=existing_data.get(f'{prefix}_t3_actual', ''))
+        data[f'{prefix}_t1_formula'] = text_area_with_counter(
+            "Provide the KPI formula for first practice *",
+            f"{prefix}_t1_formula",
+            height=100,
+            max_chars=1000,
+            value=existing_data.get(f'{prefix}_t1_formula', '')
+        )
+        data[f'{prefix}_t1_actual'] = text_area_with_counter(
+            "Provide the actual KPI performance for first practice *",
+            f"{prefix}_t1_actual",
+            height=100,
+            max_chars=1000,
+            value=existing_data.get(f'{prefix}_t1_actual', '')
+        )
+        data[f'{prefix}_t2_formula'] = text_area_with_counter(
+            "Provide the KPI formula for second practice *",
+            f"{prefix}_t2_formula",
+            height=100,
+            max_chars=1000,
+            value=existing_data.get(f'{prefix}_t2_formula', '')
+        )
+        data[f'{prefix}_t2_actual'] = text_area_with_counter(
+            "Provide the actual KPI performance for second practice *",
+            f"{prefix}_t2_actual",
+            height=100,
+            max_chars=1000,
+            value=existing_data.get(f'{prefix}_t2_actual', '')
+        )
+        data[f'{prefix}_t3_formula'] = text_area_with_counter(
+            "Provide the KPI formula for third practice *",
+            f"{prefix}_t3_formula",
+            height=100,
+            max_chars=1000,
+            value=existing_data.get(f'{prefix}_t3_formula', '')
+        )
+        data[f'{prefix}_t3_actual'] = text_area_with_counter(
+            "Provide the actual KPI performance for third practice *",
+            f"{prefix}_t3_actual",
+            height=100,
+            max_chars=1000,
+            value=existing_data.get(f'{prefix}_t3_actual', '')
+        )
     
     st.markdown("---")
-    data[f'{prefix}_rationale'] = st.text_area("Provide the rationale to why you selected this best practice & tier *", 
-                                                key=f"{prefix}_rationale", height=150,
-                                                value=existing_data.get(f'{prefix}_rationale', ''))
-    data[f'{prefix}_success'] = st.text_area("Are there any success stories and/or barriers to implementing this best practice? *", 
-                                              key=f"{prefix}_success", height=150,
-                                              value=existing_data.get(f'{prefix}_success', ''))
+    data[f'{prefix}_rationale'] = text_area_with_counter(
+        "Provide the rationale to why you selected this best practice & tier *",
+        f"{prefix}_rationale",
+        height=150,
+        max_chars=2000,
+        value=existing_data.get(f'{prefix}_rationale', '')
+    )
+    data[f'{prefix}_success'] = text_area_with_counter(
+        "Are there any success stories and/or barriers to implementing this best practice? *",
+        f"{prefix}_success",
+        height=150,
+        max_chars=2000,
+        value=existing_data.get(f'{prefix}_success', '')
+    )
     
     return data
 
 def render_bp5_questions(tier, prefix, existing_data=None):
-    """BP5: Patient Flow Throughput Performance Council - NON-HIERARCHICAL (like BP4)"""
+    """BP5: Patient Flow Throughput Performance Council - NON-HIERARCHICAL (no tier labels needed)"""
     data = {}
     existing_data = existing_data or {}
     
@@ -642,15 +937,27 @@ def render_bp5_questions(tier, prefix, existing_data=None):
             measures.append(f"Other: {other}")
         
         data[f'{prefix}_t1_measures'] = ", ".join(measures)
-        data[f'{prefix}_t1_formula'] = st.text_area("Provide the target measures' formula to achieve tier 1 *", 
-                                                      key=f"{prefix}_t1_formula", height=100,
-                                                      value=existing_data.get(f'{prefix}_t1_formula', ''))
-        data[f'{prefix}_t1_actual'] = st.text_area("Provide the target measures' actual performance results to achieve tier 1 *", 
-                                                     key=f"{prefix}_t1_actual", height=100,
-                                                     value=existing_data.get(f'{prefix}_t1_actual', ''))
-        data[f'{prefix}_improvements'] = st.text_area("Describe any throughput improvements measured after implementing this best practice *", 
-                                                        key=f"{prefix}_improvements", height=100,
-                                                        value=existing_data.get(f'{prefix}_improvements', ''))
+        data[f'{prefix}_t1_formula'] = text_area_with_counter(
+            "Provide the target measures' formula to achieve tier 1 *",
+            f"{prefix}_t1_formula",
+            height=100,
+            max_chars=1000,
+            value=existing_data.get(f'{prefix}_t1_formula', '')
+        )
+        data[f'{prefix}_t1_actual'] = text_area_with_counter(
+            "Provide the target measures' actual performance results to achieve tier 1 *",
+            f"{prefix}_t1_actual",
+            height=100,
+            max_chars=1000,
+            value=existing_data.get(f'{prefix}_t1_actual', '')
+        )
+        data[f'{prefix}_improvements'] = text_area_with_counter(
+            "Describe any throughput improvements measured after implementing this best practice *",
+            f"{prefix}_improvements",
+            height=100,
+            max_chars=1000,
+            value=existing_data.get(f'{prefix}_improvements', '')
+        )
     
     elif tier == 2:
         st.markdown("### Tier 2: Establish Accountability")
@@ -671,15 +978,27 @@ def render_bp5_questions(tier, prefix, existing_data=None):
             measures2.append(f"Other: {other}")
         
         data[f'{prefix}_t2_measures'] = ", ".join(measures2)
-        data[f'{prefix}_t2_formula'] = st.text_area("Provide the target measures' formula to achieve tier 2 *", 
-                                                      key=f"{prefix}_t2_formula", height=100,
-                                                      value=existing_data.get(f'{prefix}_t2_formula', ''))
-        data[f'{prefix}_t2_actual'] = st.text_area("Provide the target measures' actual performance results to achieve tier 2 *", 
-                                                     key=f"{prefix}_t2_actual", height=100,
-                                                     value=existing_data.get(f'{prefix}_t2_actual', ''))
-        data[f'{prefix}_improvements'] = st.text_area("Describe any throughput improvements measured after implementing this best practice *", 
-                                                        key=f"{prefix}_improvements", height=100,
-                                                        value=existing_data.get(f'{prefix}_improvements', ''))
+        data[f'{prefix}_t2_formula'] = text_area_with_counter(
+            "Provide the target measures' formula to achieve tier 2 *",
+            f"{prefix}_t2_formula",
+            height=100,
+            max_chars=1000,
+            value=existing_data.get(f'{prefix}_t2_formula', '')
+        )
+        data[f'{prefix}_t2_actual'] = text_area_with_counter(
+            "Provide the target measures' actual performance results to achieve tier 2 *",
+            f"{prefix}_t2_actual",
+            height=100,
+            max_chars=1000,
+            value=existing_data.get(f'{prefix}_t2_actual', '')
+        )
+        data[f'{prefix}_improvements'] = text_area_with_counter(
+            "Describe any throughput improvements measured after implementing this best practice *",
+            f"{prefix}_improvements",
+            height=100,
+            max_chars=1000,
+            value=existing_data.get(f'{prefix}_improvements', '')
+        )
     
     elif tier == 3:
         st.markdown("### Tier 3: Change Culture")
@@ -706,55 +1025,134 @@ def render_bp5_questions(tier, prefix, existing_data=None):
             measures3.append(f"Other: {other}")
         
         data[f'{prefix}_t3_measures'] = ", ".join(measures3)
-        data[f'{prefix}_t3_formula'] = st.text_area("Provide the target measures' formula to achieve tier 3 *", 
-                                                      key=f"{prefix}_t3_formula", height=100,
-                                                      value=existing_data.get(f'{prefix}_t3_formula', ''))
-        data[f'{prefix}_t3_actual'] = st.text_area("Provide the target measures' actual performance results to achieve tier 3 *", 
-                                                     key=f"{prefix}_t3_actual", height=100,
-                                                     value=existing_data.get(f'{prefix}_t3_actual', ''))
-        data[f'{prefix}_improvements'] = st.text_area("Describe any throughput improvements measured after implementing this best practice *", 
-                                                        key=f"{prefix}_improvements", height=100,
-                                                        value=existing_data.get(f'{prefix}_improvements', ''))
+        data[f'{prefix}_t3_formula'] = text_area_with_counter(
+            "Provide the target measures' formula to achieve tier 3 *",
+            f"{prefix}_t3_formula",
+            height=100,
+            max_chars=1000,
+            value=existing_data.get(f'{prefix}_t3_formula', '')
+        )
+        data[f'{prefix}_t3_actual'] = text_area_with_counter(
+            "Provide the target measures' actual performance results to achieve tier 3 *",
+            f"{prefix}_t3_actual",
+            height=100,
+            max_chars=1000,
+            value=existing_data.get(f'{prefix}_t3_actual', '')
+        )
+        data[f'{prefix}_improvements'] = text_area_with_counter(
+            "Describe any throughput improvements measured after implementing this best practice *",
+            f"{prefix}_improvements",
+            height=100,
+            max_chars=1000,
+            value=existing_data.get(f'{prefix}_improvements', '')
+        )
     
     st.markdown("---")
-    data[f'{prefix}_rationale'] = st.text_area("Provide the rationale to why you selected this best practice & tier *", 
-                                                key=f"{prefix}_rationale", height=150,
-                                                value=existing_data.get(f'{prefix}_rationale', ''))
-    data[f'{prefix}_success'] = st.text_area("Are there any success stories and/or barriers to implementing this best practice? *", 
-                                              key=f"{prefix}_success", height=150,
-                                              value=existing_data.get(f'{prefix}_success', ''))
+    data[f'{prefix}_rationale'] = text_area_with_counter(
+        "Provide the rationale to why you selected this best practice & tier *",
+        f"{prefix}_rationale",
+        height=150,
+        max_chars=2000,
+        value=existing_data.get(f'{prefix}_rationale', '')
+    )
+    data[f'{prefix}_success'] = text_area_with_counter(
+        "Are there any success stories and/or barriers to implementing this best practice? *",
+        f"{prefix}_success",
+        height=150,
+        max_chars=2000,
+        value=existing_data.get(f'{prefix}_success', '')
+    )
     
     return data
 
 def render_bp6_questions(tier, prefix, existing_data=None):
-    """BP6: Clinical Pathways & Observation Management - CUMULATIVE"""
+    """BP6: Clinical Pathways & Observation Management - CUMULATIVE with tier labels"""
     data = {}
     existing_data = existing_data or {}
     
-    st.markdown("### Tier 1: Design and Implement")
-    data[f'{prefix}_t1_pathway'] = st.text_area("Describe the clinical pathway that was selected and implemented to achieve tier 1 *", 
-                                                 key=f"{prefix}_t1_pathway", height=150,
-                                                 value=existing_data.get(f'{prefix}_t1_pathway', ''))
+    st.markdown("### 🟢 Tier 1: Design and Implement")
+    data[f'{prefix}_t1_pathway'] = text_area_with_counter(
+        "Describe the clinical pathway that was selected and implemented to achieve tier 1 *",
+        f"{prefix}_t1_pathway",
+        height=150,
+        max_chars=2000,
+        value=existing_data.get(f'{prefix}_t1_pathway', ''),
+        tier_label=1
+    )
+    data[f'{prefix}_t1_target'] = text_input_with_tier(
+        "Provide the target measure to achieve tier 1 *",
+        f"{prefix}_t1_target",
+        value=existing_data.get(f'{prefix}_t1_target', ''),
+        tier_label=1
+    )
+    data[f'{prefix}_t1_actual'] = text_input_with_tier(
+        "Provide the actual performance results to achieve tier 1 *",
+        f"{prefix}_t1_actual",
+        value=existing_data.get(f'{prefix}_t1_actual', ''),
+        tier_label=1
+    )
     
     if tier >= 2:
-        st.markdown("### Tier 2: Develop Data Infrastructure")
-        data[f'{prefix}_t2_data'] = st.text_area("Describe the data collection and analysis systems to monitor and evaluate outcomes that were selected and implemented to achieve tier 2 *", 
-                                                   key=f"{prefix}_t2_data", height=150,
-                                                   value=existing_data.get(f'{prefix}_t2_data', ''))
+        st.markdown("### 🟡 Tier 2: Develop Data Infrastructure (in addition to Tier 1)")
+        data[f'{prefix}_t2_data'] = text_area_with_counter(
+            "Describe the data collection and analysis systems implemented to achieve tier 2 *",
+            f"{prefix}_t2_data",
+            height=150,
+            max_chars=2000,
+            value=existing_data.get(f'{prefix}_t2_data', ''),
+            tier_label=2
+        )
+        data[f'{prefix}_t2_target'] = text_input_with_tier(
+            "Provide the target measure to achieve tier 2 *",
+            f"{prefix}_t2_target",
+            value=existing_data.get(f'{prefix}_t2_target', ''),
+            tier_label=2
+        )
+        data[f'{prefix}_t2_actual'] = text_input_with_tier(
+            "Provide the actual performance results to achieve tier 2 *",
+            f"{prefix}_t2_actual",
+            value=existing_data.get(f'{prefix}_t2_actual', ''),
+            tier_label=2
+        )
     
     if tier >= 3:
-        st.markdown("### Tier 3: Demonstrate Improvement")
-        data[f'{prefix}_t3_improvement'] = st.text_area("Describe the measurable decrease in unwarranted clinical variation and/or measurable improvement in outcomes specific to your chosen intervention to achieve tier 3 *", 
-                                                          key=f"{prefix}_t3_improvement", height=150,
-                                                          value=existing_data.get(f'{prefix}_t3_improvement', ''))
+        st.markdown("### 🔴 Tier 3: Demonstrate Improvement (in addition to Tiers 1 & 2)")
+        data[f'{prefix}_t3_improvement'] = text_area_with_counter(
+            "Describe the measurable results that demonstrate improvement to achieve tier 3 *",
+            f"{prefix}_t3_improvement",
+            height=150,
+            max_chars=2000,
+            value=existing_data.get(f'{prefix}_t3_improvement', ''),
+            tier_label=3
+        )
+        data[f'{prefix}_t3_target'] = text_input_with_tier(
+            "Provide the target measure to achieve tier 3 *",
+            f"{prefix}_t3_target",
+            value=existing_data.get(f'{prefix}_t3_target', ''),
+            tier_label=3
+        )
+        data[f'{prefix}_t3_actual'] = text_input_with_tier(
+            "Provide the actual performance results to achieve tier 3 *",
+            f"{prefix}_t3_actual",
+            value=existing_data.get(f'{prefix}_t3_actual', ''),
+            tier_label=3
+        )
     
     st.markdown("---")
-    data[f'{prefix}_rationale'] = st.text_area("Provide the rationale to why you selected this best practice & tier *", 
-                                                key=f"{prefix}_rationale", height=150,
-                                                value=existing_data.get(f'{prefix}_rationale', ''))
-    data[f'{prefix}_success'] = st.text_area("Are there any success stories and/or barriers to implementing this best practice? *", 
-                                              key=f"{prefix}_success", height=150,
-                                              value=existing_data.get(f'{prefix}_success', ''))
+    data[f'{prefix}_rationale'] = text_area_with_counter(
+        "Provide the rationale to why you selected this best practice & tier *",
+        f"{prefix}_rationale",
+        height=150,
+        max_chars=2000,
+        value=existing_data.get(f'{prefix}_rationale', '')
+    )
+    data[f'{prefix}_success'] = text_area_with_counter(
+        "Are there any success stories and/or barriers to implementing this best practice? *",
+        f"{prefix}_success",
+        height=150,
+        max_chars=2000,
+        value=existing_data.get(f'{prefix}_success', '')
+    )
     
     return data
 
@@ -887,21 +1285,40 @@ if existing_submission is not None and not st.session_state.edit_mode:
                 data['approved_at'] = approved_at_time
                 
                 with st.spinner("Approving submission..."):
-                    success = append_row_to_sheets(data)  # Actually updates the row now
+                    success = save_or_update_submission(selected_hospital, data)  # Actually updates the row now
                 
                 if success:
-                    # Send approval email to hospital
+                    # Send approval email to hospital(s)
                     with st.spinner("Sending approval email..."):
-                        email_sent = send_approval_email(
+                        # Send to primary contact
+                        email_sent_primary = send_approval_email(
                             recipient_email=existing_submission.get('email'),
                             hospital_name=selected_hospital,
                             contact_name=existing_submission.get('contact_name'),
                             approved_by=data['approved_by'],
                             approved_at=approved_at_time
                         )
-                    
-                    if email_sent:
-                        st.success("📧 Approval email sent!")
+                        
+                        # Send to secondary contact if provided
+                        email_sent_secondary = True
+                        secondary_email_addr = existing_submission.get('secondary_email')
+                        if secondary_email_addr and secondary_email_addr.strip():
+                            email_sent_secondary = send_approval_email(
+                                recipient_email=secondary_email_addr,
+                                hospital_name=selected_hospital,
+                                contact_name=existing_submission.get('secondary_contact_name') or "Secondary Contact",
+                                approved_by=data['approved_by'],
+                                approved_at=approved_at_time
+                            )
+                        
+                        if email_sent_primary and email_sent_secondary:
+                            st.success("📧 Approval emails sent to both contacts!")
+                        elif email_sent_primary:
+                            st.success("📧 Approval email sent to primary contact!")
+                            if secondary_email_addr and secondary_email_addr.strip():
+                                st.warning("⚠️ Failed to send approval email to secondary contact.")
+                        else:
+                            st.error("❌ Failed to send approval emails.")
                     
                     st.cache_data.clear()
                     st.success("✅ Submission approved!")
@@ -946,7 +1363,7 @@ if existing_submission is not None and not st.session_state.edit_mode:
                     data['approved_at'] = ''
                     
                     with st.spinner("Un-approving submission..."):
-                        success = append_row_to_sheets(data)  # Actually updates the row now
+                        success = save_or_update_submission(selected_hospital, data)  # Actually updates the row now
                     
                     if success:
                         st.cache_data.clear()
@@ -1085,14 +1502,24 @@ else:
     
     # Hospital Info (pre-filled if editing)
     st.markdown("## 🏥 Hospital Information")
-    
+
+    st.markdown("### Primary Contact")
     col1, col2 = st.columns(2)
     with col1:
-        contact_name = st.text_input("Contact Name *", value=existing_data.get('contact_name', ''))
+        contact_name = st.text_input("Primary Contact Name *", value=existing_data.get('contact_name', ''))
     with col2:
-        email = st.text_input("Email Address *", value=existing_data.get('email', ''))
-    
-    phone = st.text_input("Phone Number *", value=existing_data.get('phone', ''))
+        email = st.text_input("Primary Email Address *", value=existing_data.get('email', ''))
+
+    phone = st.text_input("Primary Phone Number *", value=existing_data.get('phone', ''))
+
+    st.markdown("### Secondary Contact (Optional)")
+    col3, col4 = st.columns(2)
+    with col3:
+        secondary_contact_name = st.text_input("Secondary Contact Name", value=existing_data.get('secondary_contact_name', ''))
+    with col4:
+        secondary_email = st.text_input("Secondary Email Address", value=existing_data.get('secondary_email', ''))
+
+    secondary_phone = st.text_input("Secondary Phone Number", value=existing_data.get('secondary_phone', ''))
     st.markdown("---")
     
     # ==================== BP #1 ====================
@@ -1194,49 +1621,101 @@ else:
     # ==================== SUBMIT ====================
     st.markdown("---")
     
-    submit_label = "💾 Update Survey" if st.session_state.edit_mode else "✅ Submit Survey"
+    # ==================== SAVE DRAFT & SUBMIT BUTTONS ====================
+    col_btn1, col_btn2 = st.columns(2)
     
-    if st.button(submit_label):
-        # Build submission data dictionary
-        data = {
-            'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            'hospital_name': selected_hospital,
-            'contact_name': contact_name,
-            'email': email,
-            'phone': phone,
-            'bp1': bp1,
-            'bp1_tier': tier1 if bp1 else None,
-            'bp2': bp2,
-            'bp2_tier': tier2 if bp2 else None,
-            'approved': 'False',  # Reset approval when editing
-            'approved_by': '',
-            'approved_at': ''
-        }
-        
-        # Add BP-specific data
-        data.update(bp1_data)
-        data.update(bp2_data)
-        
-        # Save/Update in Google Sheets (updates existing row if hospital exists)
-        with st.spinner("Saving to Data..."):
-            success = append_row_to_sheets(data)  # Actually updates the row now
-        
-        if success:
-            # Send email notification to hospital
-            with st.spinner("Sending email confirmation..."):
-                email_sent = send_submission_email(
-                    recipient_email=email,
-                    hospital_name=selected_hospital,
-                    contact_name=contact_name,
-                    submission_data=data
-                )
+    with col_btn1:
+        if st.button("💾 Save Draft", use_container_width=True, type="secondary"):
+            # Build submission data dictionary
+            data = {
+                'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                'hospital_name': selected_hospital,
+                'contact_name': contact_name,
+                'email': email,
+                'phone': phone,
+                'secondary_contact_name': secondary_contact_name,  # ← ADD
+                'secondary_email': secondary_email,                # ← ADD
+                'secondary_phone': secondary_phone,                # ← ADD
+                'bp1': bp1,
+                'bp1_tier': tier1 if bp1 else None,
+                'bp2': bp2,
+                'bp2_tier': tier2 if bp2 else None,
+                'approved': 'False',
+                'approved_by': '',
+                'approved_at': ''
+            }
             
-            if email_sent:
-                st.success("📧 Confirmation email sent!")
+            # Add BP-specific data
+            data.update(bp1_data)
+            data.update(bp2_data)
             
-            st.session_state.just_submitted = True
-            st.session_state.edit_mode = False
-            st.cache_data.clear()
-            st.rerun()
-        else:
-            st.error("❌ Failed to save submission. Please try again.")
+            # Save to Google Sheets (NO EMAIL!)
+            with st.spinner("Saving draft..."):
+                success = save_or_update_submission(selected_hospital, data)
+            
+            if success:
+                st.success("💾 Draft saved! You can come back anytime to continue editing.")
+                st.cache_data.clear()
+            else:
+                st.error("❌ Failed to save draft. Please try again.")
+    
+    with col_btn2:
+        submit_label = "💾 Update Survey" if st.session_state.edit_mode else "✅ Submit Survey"
+        
+        if st.button(submit_label, use_container_width=True, type="primary"):
+            # Build submission data dictionary
+            data = {
+                'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                'hospital_name': selected_hospital,
+                'contact_name': contact_name,
+                'email': email,
+                'phone': phone,
+                'secondary_contact_name': secondary_contact_name,  # ← ADD
+                'secondary_email': secondary_email,                # ← ADD
+                'secondary_phone': secondary_phone,                # ← ADD
+                'bp1': bp1,
+                'bp1_tier': tier1 if bp1 else None,
+                'bp2': bp2,
+                'bp2_tier': tier2 if bp2 else None,
+                'approved': 'False',
+                'approved_by': '',
+                'approved_at': ''
+            }
+            
+            # Add BP-specific data
+            data.update(bp1_data)
+            data.update(bp2_data)
+            
+            # Save/Update in Google Sheets (updates existing row if hospital exists)
+            with st.spinner("Saving to Database..."):
+                success = save_or_update_submission(selected_hospital, data)
+            
+            if success:
+                # Send email notification to hospital
+                with st.spinner("Sending email confirmation..."):
+                    # Send to primary contact
+                    email_sent_primary = send_submission_email(
+                        recipient_email=email,
+                        hospital_name=selected_hospital,
+                        contact_name=contact_name,
+                        submission_data=data
+                    )
+                    
+                    # Send to secondary contact if provided
+                    email_sent_secondary = True
+                    if secondary_email.strip():
+                        email_sent_secondary = send_submission_email(
+                            recipient_email=secondary_email,
+                            hospital_name=selected_hospital,
+                            contact_name=secondary_contact_name or "Secondary Contact",
+                            submission_data=data
+                        )
+                    
+                    if email_sent_primary and email_sent_secondary:
+                        st.success("📧 Confirmation emails sent to both contacts!")
+                    elif email_sent_primary:
+                        st.success("📧 Confirmation email sent to primary contact!")
+                        if secondary_email.strip():
+                            st.warning("⚠️ Failed to send email to secondary contact.")
+                    else:
+                        st.error("❌ Failed to send confirmation emails.")
