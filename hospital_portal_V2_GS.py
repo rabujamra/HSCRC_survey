@@ -1311,14 +1311,11 @@ if existing_submission is not None and not st.session_state.edit_mode:
                                 approved_at=approved_at_time
                             )
                         
-                        if email_sent_primary and email_sent_secondary:
-                            st.success("📧 Approval emails sent to both contacts!")
-                        elif email_sent_primary:
-                            st.success("📧 Approval email sent to primary contact!")
-                            if secondary_email_addr and secondary_email_addr.strip():
-                                st.warning("⚠️ Failed to send approval email to secondary contact.")
+                        if email_sent_primary:
+                            st.success("📧 Approval email sent!")
+                            # Note: Secondary email failures are handled silently since it's optional
                         else:
-                            st.error("❌ Failed to send approval emails.")
+                            st.error("❌ Failed to send approval email.")
                     
                     st.cache_data.clear()
                     st.success("✅ Submission approved!")
@@ -1711,11 +1708,8 @@ else:
                             submission_data=data
                         )
                     
-                    if email_sent_primary and email_sent_secondary:
-                        st.success("📧 Confirmation emails sent to both contacts!")
-                    elif email_sent_primary:
-                        st.success("📧 Confirmation email sent to primary contact!")
-                        if secondary_email.strip():
-                            st.warning("⚠️ Failed to send email to secondary contact.")
+                    if email_sent_primary:
+                        st.success("📧 Approval email sent!")
+                        # Note: Secondary email failures are handled silently since it's optional
                     else:
-                        st.error("❌ Failed to send confirmation emails.")
+                        st.error("❌ Failed to send approval email.")
