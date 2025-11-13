@@ -82,6 +82,50 @@ BP_OPTIONS = {
     "BP6": "BP6: Clinical Pathways & Observation Management"
 }
 
+# Hospital Best Practice Assignments (Updated List)
+HOSPITAL_BP_ASSIGNMENTS = {
+    "Adventist White Oak": ["BP1", "BP4"],
+    "Ascension St Agnes": ["BP2", "BP5"], 
+    "Atlantic General": ["BP1", "BP3"],
+    "Calvert Health": ["BP3", "BP4"],
+    "Carroll Hospital Center": ["BP2", "BP5"],
+    "Christiana Care-Union Hospital": ["BP3", "BP4"],
+    "Fort Washington": ["BP4", "BP6"],
+    "Frederick Health": ["BP4", "BP5"],
+    "Garrett Regional": ["BP3", "BP5"],
+    "GBMC": ["BP4", "BP5"],
+    "Holy Cross Germantown": ["BP3", "BP5"],
+    "Holy Cross Silver Spring": ["BP3", "BP5"],
+    "Johns Hopkins Bayview": ["BP1", "BP5"],
+    "Johns Hopkins Hospital": ["BP2", "BP3"],
+    "Johns Hopkins Howard County": ["BP2", "BP4"],
+    "Luminis Anne Arundel Medical Ctr": ["BP4", "BP5"],
+    "Luminis Health-Doctors": ["BP2", "BP5"],
+    "Medstar Franklin Square": ["BP3", "BP6"],
+    "Medstar Good Samaritan": ["BP1", "BP4"],
+    "Medstar Harbor": ["BP1", "BP2"],
+    "Medstar Montgomery": ["BP1", "BP4"],
+    "Medstar Southern Maryland": ["BP2", "BP3"],
+    "Medstar St Mary's": ["BP1", "BP5"],
+    "Medstar Union Memorial": ["BP1", "BP4"],
+    "Mercy Medical Center": ["BP1", "BP4"],
+    "Meritus": ["BP4", "BP5"],
+    "Northwest": ["BP4", "BP5"],
+    "Shady Grove": ["BP4", "BP6"],
+    "Sinai": ["BP3", "BP5"],
+    "Suburban": ["BP2", "BP3"],
+    "Tidal Health": ["BP2", "BP6"],
+    "UM BWMC": ["BP5", "BP6"],
+    "UM Capital Region Medical Center": ["BP2", "BP5"],
+    "UM Charles Regional": ["BP1", "BP3"],
+    "UM Shore Regional": ["BP3", "BP5"],
+    "UM St Joseph Medical Center": ["BP1", "BP3"],
+    "UM Upper Chesapeake": ["BP3", "BP4"],
+    "UMMC Downtown": ["BP1", "BP3"],
+    "UMMC-Midtown": ["BP1", "BP3"],
+    "UPMC Western Maryland": ["BP2", "BP6"],
+}
+
 TIER_DESCRIPTIONS = {
     "BP1": {
         "name": "Interdisciplinary Rounds & Early Discharge Planning",
@@ -804,7 +848,7 @@ def render_bp4_questions(tier, prefix, existing_data=None):
     existing_data = existing_data or {}
     
     if tier == 1:
-        st.markdown("### Tier 1: Select ONE Expedited Care Practice")
+        st.markdown("### 🟢 Tier 1: Select ONE Expedited Care Practice")
         data[f'{prefix}_practice'] = st.radio("Select the expedited care practice you plan to report *", practices, key=f"{prefix}_practice")
         data[f'{prefix}_t1_formula'] = text_area_with_counter(
             "Provide the KPI formula for this practice *",
@@ -822,7 +866,7 @@ def render_bp4_questions(tier, prefix, existing_data=None):
         )
     
     elif tier == 2:
-        st.markdown("### Tier 2: Select TWO Expedited Care Practices")
+        st.markdown("### 🟡 Tier 2: Select TWO Expedited Care Practices")
         selected = st.multiselect("Select two expedited care practices *", practices, key=f"{prefix}_practices")
         data[f'{prefix}_practices'] = ", ".join(selected)
         data[f'{prefix}_t1_formula'] = text_area_with_counter(
@@ -855,7 +899,7 @@ def render_bp4_questions(tier, prefix, existing_data=None):
         )
     
     elif tier == 3:
-        st.markdown("### Tier 3: Select THREE Expedited Care Practices")
+        st.markdown("### 🔴 Tier 3: Select THREE Expedited Care Practices")
         selected = st.multiselect("Select three expedited care practices *", practices, key=f"{prefix}_practices")
         data[f'{prefix}_practices'] = ", ".join(selected)
         data[f'{prefix}_t1_formula'] = text_area_with_counter(
@@ -925,7 +969,7 @@ def render_bp5_questions(tier, prefix, existing_data=None):
     existing_data = existing_data or {}
     
     if tier == 1:
-        st.markdown("### Tier 1: Create Structure")
+        st.markdown("### 🟢 Tier 1: Create Structure")
         st.markdown("**Select the accountable measure(s) you plan to report: ***")
         measures = []
         if st.checkbox("Committee/council scheduled monthly at minimum", key=f"{prefix}_t1_monthly"):
@@ -960,7 +1004,7 @@ def render_bp5_questions(tier, prefix, existing_data=None):
         )
     
     elif tier == 2:
-        st.markdown("### Tier 2: Establish Accountability")
+        st.markdown("### 🟡 Tier 2: Establish Accountability")
         st.markdown("**Select the accountable measure(s) you plan to report: ***")
         measures2 = []
         if st.checkbox("Committee/council scheduled monthly at minimum", key=f"{prefix}_t2_monthly"):
@@ -1001,7 +1045,7 @@ def render_bp5_questions(tier, prefix, existing_data=None):
         )
     
     elif tier == 3:
-        st.markdown("### Tier 3: Change Culture")
+        st.markdown("### 🔴 Tier 3: Change Culture")
         st.markdown("**Select the accountable measure(s) you plan to report: ***")
         measures3 = []
         if st.checkbox("Committee/council scheduled monthly at minimum", key=f"{prefix}_t3_monthly"):
@@ -1527,11 +1571,22 @@ else:
     bp1_options_list = list(BP_OPTIONS.keys())
     bp1_default_index = bp1_options_list.index(bp1_default) if bp1_default in bp1_options_list else 0
     
+    # Get assigned BPs for this hospital
+    assigned_bps = HOSPITAL_BP_ASSIGNMENTS.get(selected_hospital, ["", ""])
+    assigned_bp1 = assigned_bps[0] if len(assigned_bps) > 0 else ""
+    assigned_bp2 = assigned_bps[1] if len(assigned_bps) > 1 else ""
+
+    # Pre-fill with assigned BP or use existing data
+    bp1_value = existing_data.get('bp1', assigned_bp1)
+    bp1_index = bp1_options_list.index(bp1_value) if bp1_value in bp1_options_list else 0
+
+    st.info(f"📋 **Assigned Best Practice:** {BP_OPTIONS.get(assigned_bp1, 'None assigned')}")
     bp1 = st.selectbox("Select the first Best Practice *", 
-                       bp1_options_list, 
-                       format_func=lambda x: BP_OPTIONS[x], 
-                       key="bp1",
-                       index=bp1_default_index)
+                    bp1_options_list, 
+                    format_func=lambda x: BP_OPTIONS[x], 
+                    key="bp1",
+                    index=bp1_index,
+                    disabled=True if assigned_bp1 else False)  # Make read-only if assigned
     
     bp1_data = {}
     if bp1 and bp1 != "":
@@ -1575,11 +1630,24 @@ else:
     bp2_options_list = list(BP_OPTIONS.keys())
     bp2_default_index = bp2_options_list.index(bp2_default) if bp2_default in bp2_options_list else 0
     
+    # Get assigned BPs for this hospital
+    assigned_bps = HOSPITAL_BP_ASSIGNMENTS.get(selected_hospital, ["", ""])
+    assigned_bp1 = assigned_bps[0] if len(assigned_bps) > 0 else ""
+    assigned_bp2 = assigned_bps[1] if len(assigned_bps) > 1 else ""
+
+    # Pre-fill BP2 with assigned BP or use existing data
+    bp2_value = existing_data.get('bp2', assigned_bp2)
+    bp2_index = bp2_options_list.index(bp2_value) if bp2_value in bp2_options_list else 0
+
+    if assigned_bp2:
+        st.info(f"📋 **Assigned Best Practice:** {BP_OPTIONS.get(assigned_bp2, 'None assigned')}")
+
     bp2 = st.selectbox("Select the second Best Practice *", 
-                       bp2_options_list, 
-                       format_func=lambda x: BP_OPTIONS[x], 
-                       key="bp2",
-                       index=bp2_default_index)
+                   bp2_options_list, 
+                   format_func=lambda x: BP_OPTIONS[x], 
+                   key="bp2",
+                   index=bp2_index,
+                   disabled=True if assigned_bp2 else False)
     
     bp2_data = {}
     if bp2 and bp2 != "":
