@@ -1580,13 +1580,16 @@ else:
     bp1_value = existing_data.get('bp1', assigned_bp1)
     bp1_index = bp1_options_list.index(bp1_value) if bp1_value in bp1_options_list else 0
 
-    st.info(f"📋 **Assigned Best Practice:** {BP_OPTIONS.get(assigned_bp1, 'None assigned')}")
-    bp1 = st.selectbox("Select the first Best Practice *", 
-                    bp1_options_list, 
-                    format_func=lambda x: BP_OPTIONS[x], 
-                    key="bp1",
-                    index=bp1_index,
-                    disabled=True if assigned_bp1 else False)  # Make read-only if assigned
+    if assigned_bp1:
+        bp1 = assigned_bp1
+
+    else:
+        # Allow manual selection if no assignment
+        bp1 = st.selectbox("Select the first Best Practice *", 
+                        bp1_options_list, 
+                        format_func=lambda x: BP_OPTIONS[x], 
+                        key="bp1",
+                        index=bp1_index)
     
     bp1_data = {}
     if bp1 and bp1 != "":
@@ -1640,14 +1643,15 @@ else:
     bp2_index = bp2_options_list.index(bp2_value) if bp2_value in bp2_options_list else 0
 
     if assigned_bp2:
-        st.info(f"📋 **Assigned Best Practice:** {BP_OPTIONS.get(assigned_bp2, 'None assigned')}")
-
-    bp2 = st.selectbox("Select the second Best Practice *", 
-                   bp2_options_list, 
-                   format_func=lambda x: BP_OPTIONS[x], 
-                   key="bp2",
-                   index=bp2_index,
-                   disabled=True if assigned_bp2 else False)
+        bp2 = assigned_bp2
+        
+    else:
+        # Allow manual selection if no assignment
+        bp2 = st.selectbox("Select the second Best Practice *", 
+                        bp2_options_list, 
+                        format_func=lambda x: BP_OPTIONS[x], 
+                        key="bp2",
+                        index=bp2_index)
     
     bp2_data = {}
     if bp2 and bp2 != "":
